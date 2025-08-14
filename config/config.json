@@ -1,0 +1,7 @@
+{
+  "endpoints": [
+    "http://localhost:5001/Mazak/current",
+    "http://localhost:5001/OKUMA/current",
+    "https://smstestbed.nist.gov/vds/current"
+  ]
+}
