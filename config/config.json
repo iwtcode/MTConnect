@@ -1,4 +1,5 @@
 {
+  "server_port": "8080",
   "endpoints": [
     "http://localhost:5001/Mazak/current",
     "http://localhost:5001/OKUMA/current",

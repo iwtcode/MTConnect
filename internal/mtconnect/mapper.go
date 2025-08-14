@@ -1,6 +1,9 @@
 package mtconnect
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Целевая структура для JSON
 type MachineData struct {
@@ -10,8 +13,6 @@ type MachineData struct {
 	Execution      string `json:"MachineState"`
 	ControllerMode string `json:"ProgramMode"`
 	PartCount      string `json:"PartsCount"`
-	PowerOnTime    string `json:"PowerOnTime"`
-	// ... добавить остальные поля
 }
 
 // Преобразует MTConnect XML в целевую структуру
@@ -19,62 +20,42 @@ func MapToMachineData(streams *MTConnectStreams) []MachineData {
 	var results []MachineData
 
 	for _, deviceStream := range streams.Streams.DeviceStreams {
+		// Карта для хранения данных, где ключ - это имя тега в нижнем регистре
 		dataItemsMap := make(map[string]string)
 
-		for _, compStream := range deviceStream.ComponentStream {
-			if compStream.Events != nil {
-				for _, item := range compStream.Events.Items {
-					// Ключом может быть ID (предпочтительно) или имя тега (XMLName.Local)
-					key := item.DataItemID
-					if key == "" {
-						key = item.XMLName.Local
-					}
-					dataItemsMap[key] = item.Value
-				}
-			}
-			if compStream.Samples != nil {
-				for _, item := range compStream.Samples.Items {
-					key := item.DataItemID
-					if key == "" {
-						key = item.XMLName.Local
-					}
-					dataItemsMap[key] = item.Value
-				}
-			}
-			if compStream.Condition != nil {
-				for _, item := range compStream.Condition.Items {
-					key := item.DataItemID
-					if key == "" {
-						key = item.XMLName.Local
-					}
+		// Функция для обработки любого среза DataItem
+		processItems := func(items []DataItem) {
+			for _, item := range items {
+				// Используем имя тега как ключ. Приводим к нижнему регистру для универсальности.
+				key := strings.ToLower(item.XMLName.Local)
+				if key != "" {
 					dataItemsMap[key] = item.Value
 				}
 			}
 		}
 
-		// Заполняем целевую структуру
+		// Проходим по всем компонентам и собираем данные
+		for _, compStream := range deviceStream.ComponentStream {
+			if compStream.Events != nil {
+				processItems(compStream.Events.Items)
+			}
+			if compStream.Samples != nil {
+				processItems(compStream.Samples.Items)
+			}
+			if compStream.Condition != nil {
+				processItems(compStream.Condition.Items)
+			}
+		}
+
+		// Заполняем целевую структуру, используя стандартизированные имена тегов
 		result := MachineData{
 			MachineId: deviceStream.Name,
 			Id:        deviceStream.UUID,
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 
-			// Ищем нужные значения в нашей карте
-			// Ключи - dataItemId из Devices.xml
-			Execution:      dataItemsMap["execution"],            // Mazak
-			ControllerMode: dataItemsMap["mode"],                 // Mazak
-			PartCount:      dataItemsMap["PartCountAct"],         // Mazak
-			PowerOnTime:    dataItemsMap["LpTotalOperatingTime"], // OKUMA
-		}
-
-		// Добавляем логику для OKUMA, если поля для Mazak не нашлись
-		if result.Execution == "" {
-			result.Execution = dataItemsMap["Lpexecution"]
-		}
-		if result.ControllerMode == "" {
-			result.ControllerMode = dataItemsMap["Lpmode"]
-		}
-		if result.PartCount == "" {
-			result.PartCount = dataItemsMap["Lppartcount"]
+			Execution:      dataItemsMap["execution"],      // из <Execution>
+			ControllerMode: dataItemsMap["controllermode"], // из <ControllerMode>
+			PartCount:      dataItemsMap["partcount"],      // из <PartCount>
 		}
 
 		results = append(results, result)

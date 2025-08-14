@@ -5,9 +5,10 @@ import (
 	"os"
 )
 
-// Список конечных точек
+// Список конечных точек и порт сервера
 type AppConfig struct {
-	Endpoints []string `json:"endpoints"`
+	ServerPort string   `json:"server_port"`
+	Endpoints  []string `json:"endpoints"`
 }
 
 // Парсинг конфигурационного файла
