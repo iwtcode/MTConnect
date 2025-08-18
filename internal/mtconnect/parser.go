@@ -23,13 +23,14 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 				MachineState:        "UNAVAILABLE",
 				ProgramMode:         "UNAVAILABLE",
 				TmMode:              "UNAVAILABLE",
-				HandleRetraceStatus: "UNAVAILABLE",
 				AxisMovementStatus:  "UNAVAILABLE",
 				MstbStatus:          "UNAVAILABLE",
 				EmergencyStatus:     "UNAVAILABLE",
 				AlarmStatus:         "UNAVAILABLE",
 				Alarms:              "UNAVAILABLE",
 				HasAlarms:           "UNAVAILABLE",
+				EditStatus:          "UNAVAILABLE",
+				HandleRetraceStatus: "UNAVAILABLE",
 			}
 		}
 		machine := machineDataMap[machineID]
@@ -68,10 +69,20 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 							message = "No details provided"
 						}
 
+						// Значения по умолчанию, если метаданные не найдены
+						componentName := compStream.Name
+						alarmType := condition.Type
+
+						// Ищем метаданные по dataItemId тревоги
+						meta, ok := metadata[strings.ToLower(condition.DataItemId)]
+						if ok {
+							componentName = meta.ComponentName
+						}
+
 						alarm := AlarmDetail{
 							Status:        status,
-							Type:          condition.Type,
-							ComponentName: compStream.Name,
+							Type:          alarmType,
+							ComponentName: componentName,
 							Message:       message,
 							NativeCode:    condition.NativeCode,
 						}
@@ -91,13 +102,24 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 		}
 	}
 
-	// Преобразуем карту в срез и вычисляем HasAlarms для каждого элемента
+	// Преобразуем карту в срез и вычисляем производные значения
 	var machineDataSlice []MachineData
 	for _, data := range machineDataMap {
-		// Устанавливаем флаг HasAlarms на основе итогового статуса, если он известен
+		// Устанавливаем флаг HasAlarms на основе итогового статуса
 		if data.AlarmStatus != "UNAVAILABLE" {
 			data.HasAlarms = (data.AlarmStatus == "FAULT" || data.AlarmStatus == "WARNING")
 		}
+
+		// Логика отката для EditStatus на основе ProgramMode
+		// Эта проверка выполняется только если настоящее значение EditStatus не было получено
+		if data.EditStatus == "UNAVAILABLE" && data.ProgramMode != "UNAVAILABLE" {
+			if data.ProgramMode == "EDIT" {
+				data.EditStatus = "READY"
+			} else {
+				data.EditStatus = "NOT_READY"
+			}
+		}
+
 		machineDataSlice = append(machineDataSlice, *data)
 	}
 
@@ -126,10 +148,9 @@ func processDataItem(machine *MachineData, dataItemId, value, timestamp string, 
 		machine.MachineState = value
 	case "CONTROLLER_MODE":
 		machine.ProgramMode = value
+		machine.HandleRetraceStatus = (value == "MANUAL")
 	case "T_M_MODE": // ЗАГЛУШКА
 		machine.TmMode = value
-	case "HANDLE_RETRACE_STATUS": // ЗАГЛУШКА
-		machine.HandleRetraceStatus = value
 	case "AXIS_STATE":
 		if _, isString := machine.AxisMovementStatus.(string); isString {
 			machine.AxisMovementStatus = make(map[string]string)
@@ -141,5 +162,7 @@ func processDataItem(machine *MachineData, dataItemId, value, timestamp string, 
 		}
 	case "MSTB_STATUS": // ЗАГЛУШКА
 		machine.MstbStatus = value
+	case "PROGRAM_EDIT":
+		machine.EditStatus = value
 	}
 }

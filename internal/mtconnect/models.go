@@ -16,18 +16,19 @@ type MachineData struct {
 	MachineId           string      `json:"MachineId"`           // Идентификатор станка
 	Id                  string      `json:"Id"`                  // Идентификатор станка
 	Timestamp           string      `json:"Timestamp"`           // Временная метка
-	IsEnabled           interface{} `json:"IsEnabled"`           // Станок включен (bool или "UNAVAILABLE")
-	IsInEmergency       interface{} `json:"IsInEmergency"`       // Аварийный статус (bool или "UNAVAILABLE")
+	IsEnabled           interface{} `json:"IsEnabled"`           // Станок включен
+	IsInEmergency       interface{} `json:"IsInEmergency"`       // Аварийный статус
 	MachineState        string      `json:"MachineState"`        // Статус выполнения программы
 	ProgramMode         string      `json:"ProgramMode"`         // Режим работы (MDI / MEM / EDIT)
 	TmMode              string      `json:"TmMode"`              // ЗАГЛУШКА: Режим T/M
-	HandleRetraceStatus string      `json:"HandleRetraceStatus"` // ЗАГЛУШКА: Статус ручного перемещения
 	AxisMovementStatus  interface{} `json:"AxisMovementStatus"`  // Статус движения осей
 	MstbStatus          string      `json:"MstbStatus"`          // ЗАГЛУШКА: Статус M/S/T/B
 	EmergencyStatus     string      `json:"EmergencyStatus"`     // Статус аварийного стопа
-	AlarmStatus         string      `json:"AlarmStatus"`         // Общий статус тревоги (UNAVAILABLE, NORMAL, WARNING, FAULT)
-	Alarms              interface{} `json:"Alarms"`              // Список тревог (слайс []AlarmDetail) или "UNAVAILABLE"
-	HasAlarms           interface{} `json:"hasAlarms"`           // Флаг наличия активных тревог (bool или "UNAVAILABLE")
+	AlarmStatus         string      `json:"AlarmStatus"`         // Общий статус тревоги
+	Alarms              interface{} `json:"Alarms"`              // Список тревог
+	HasAlarms           interface{} `json:"hasAlarms"`           // Флаг наличия активных тревог
+	EditStatus          string      `json:"EditStatus"`          // Статус редактирования программы
+	HandleRetraceStatus interface{} `json:"HandleRetraceStatus"` // Статус ручного перемещения (true, если CONTROLLER_MODE = MANUAL)
 }
 
 // Хранит метаданные из /probe для каждого DataItem
