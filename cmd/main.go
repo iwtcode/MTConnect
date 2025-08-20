@@ -73,8 +73,7 @@ func extractComponentMetadata(components []mtconnect.ProbeComponent, deviceId st
 					AxisComponentID: comp.ID,
 					AxisName:        comp.Name,
 					AxisType:        componentType,
-					// Используем Type из DataItem как ключ для JSON
-					DataKey: strings.ToLower(item.Type),
+					DataKey:         strings.ToLower(item.Type),
 				}
 				axisLinksMutex.Lock()
 				axisDataItemLinks[lowerId] = link

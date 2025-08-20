@@ -2,15 +2,12 @@ package mtconnect
 
 import "encoding/xml"
 
-// СТРУКТУРА AlarmDetail УДАЛЕНА. Вместо нее будет использоваться map[string]interface{}
-
 // AxisInfo содержит актуальную информацию о состоянии одной оси станка
 // Поле Data будет динамически заполняться на основе DataItem'ов из /probe
 type AxisInfo struct {
-	ID   string `json:"id"`   // ID компонента, например, "x"
-	Name string `json:"name"` // Имя компонента, например, "X"
-	Type string `json:"type"` // Тип: LINEAR или ROTARY
-	// Динамическое поле для хранения актуальных значений (position, load, state и т.д.)
+	ID   string                 `json:"id"`
+	Name string                 `json:"name"`
+	Type string                 `json:"type"`
 	Data map[string]interface{} `json:"data"`
 }
 
@@ -29,8 +26,6 @@ type MachineData struct {
 	MstbStatus          string                   `json:"MstbStatus"`          // ЗАГЛУШКА: Статус M/S/T/B
 	EmergencyStatus     string                   `json:"EmergencyStatus"`     // Статус аварийного стопа
 	AlarmStatus         string                   `json:"AlarmStatus"`         // Общий статус тревоги
-	Alarms              []map[string]interface{} `json:"Alarms"`              // Список тревог (теперь динамический)
-	HasAlarms           interface{}              `json:"hasAlarms"`           // Флаг наличия активных тревог
 	EditStatus          string                   `json:"EditStatus"`          // Статус редактирования программы
 	ManualMode          interface{}              `json:"ManualMode"`          // Ручной режим (MANUAL или MDI)
 	WriteStatus         string                   `json:"WriteStatus"`         // Статус записи (аналог EditStatus)
@@ -40,6 +35,10 @@ type MachineData struct {
 	ActiveToolNumber    string                   `json:"activeToolNumber"`    // Номер активного инструмента
 	ToolOffsetNumber    string                   `json:"toolOffsetNumber"`    // Номер смещения инструмента.
 	AxisInfos           []AxisInfo               `json:"AxisInfos"`           // подробная информация об осях
+	FeedRate            map[string]string        `json:"FeedRate"`            // Текущая подача (по подтипам)
+	FeedOverride        map[string]string        `json:"FeedOverride"`        // Корректор подачи (%) (по подтипам)
+	Alarms              []map[string]interface{} `json:"Alarms"`              // Список тревог (теперь динамический)
+	HasAlarms           interface{}              `json:"hasAlarms"`           // Флаг наличия активных тревог
 }
 
 // Хранит метаданные из /probe для каждого DataItem
@@ -56,12 +55,11 @@ type DataItemMetadata struct {
 
 // Структура для связи DataItem'а с конкретной осью
 type AxisDataItemLink struct {
-	DeviceID        string // ID станка
-	AxisComponentID string // ID компонента оси (например, "x")
-	AxisName        string // Имя оси (например, "X")
-	AxisType        string // Тип оси (LINEAR, ROTARY)
-	// Ключ, который будет использоваться в JSON (например, "position", "load")
-	DataKey string
+	DeviceID        string
+	AxisComponentID string
+	AxisName        string
+	AxisType        string
+	DataKey         string
 }
 
 // --- Структуры для парсинга /probe ---

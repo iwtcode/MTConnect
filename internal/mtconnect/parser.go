@@ -57,8 +57,6 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 				EmergencyStatus:     "UNAVAILABLE",
 				AlarmStatus:         "UNAVAILABLE",
 				WarningStatus:       "UNAVAILABLE",
-				Alarms:              make([]map[string]interface{}, 0),
-				HasAlarms:           "UNAVAILABLE",
 				EditStatus:          "UNAVAILABLE",
 				ManualMode:          "UNAVAILABLE",
 				WriteStatus:         "UNAVAILABLE",
@@ -67,6 +65,10 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 				ActiveToolNumber:    "UNAVAILABLE",
 				ToolOffsetNumber:    "UNAVAILABLE",
 				AxisInfos:           make([]AxisInfo, 0),
+				FeedRate:            make(map[string]string),
+				FeedOverride:        make(map[string]string),
+				Alarms:              make([]map[string]interface{}, 0),
+				HasAlarms:           "UNAVAILABLE",
 			}
 		}
 		machine := machineDataMap[machineID]
@@ -184,6 +186,11 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 			}
 		}
 
+		// Если карты пустые после обработки, устанавливаем "UNAVAILABLE" для отображения в JSON
+		// В данном случае, так как мы хотим видеть пустые объекты, если данных нет,
+		// или соответствующие данные, если они есть, нет необходимости устанавливать "UNAVAILABLE"
+		// для самой карты. Пустая карта JSON будет отображена как {}.
+
 		machineDataSlice = append(machineDataSlice, *data)
 	}
 
@@ -231,5 +238,17 @@ func processDataItem(machine *MachineData, dataItemId, value, timestamp string, 
 		machine.ActiveToolNumber = value
 	case "TOOL_OFFSET":
 		machine.ToolOffsetNumber = value
+	case "PATH_FEEDRATE":
+		key := strings.ToUpper(meta.SubType)
+		if key == "" {
+			key = "VALUE"
+		}
+		machine.FeedRate[key] = value
+	case "PATH_FEEDRATE_OVERRIDE":
+		key := strings.ToUpper(meta.SubType)
+		if key == "" {
+			key = "VALUE"
+		}
+		machine.FeedOverride[key] = value
 	}
 }
