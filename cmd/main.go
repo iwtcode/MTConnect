@@ -38,12 +38,23 @@ func (ds *DataStore) get(machineId string) (mtconnect.MachineData, bool) {
 var deviceMetadataStore = make(map[string]mtconnect.DataItemMetadata)
 var metadataMutex = &sync.RWMutex{}
 
-// Рекурсивная функция для извлечения DataItem из всех компонентов
-func extractDataItems(components []mtconnect.ProbeComponent) {
+// Глобальное хранилище связей: ключ - dataItemId, значение - информация о связи с осью
+var axisDataItemLinks = make(map[string]mtconnect.AxisDataItemLink)
+var axisLinksMutex = &sync.RWMutex{}
+
+// Рекурсивная функция для извлечения метаданных из всех компонентов
+func extractComponentMetadata(components []mtconnect.ProbeComponent, deviceId string) {
 	for _, comp := range components {
+		componentType := strings.ToUpper(comp.XMLName.Local)
+		isAxis := componentType == "LINEAR" || componentType == "ROTARY"
+
+		// Обрабатываем DataItem'ы внутри текущего компонента
 		for _, item := range comp.DataItems {
+			lowerId := strings.ToLower(item.ID)
+
+			// 1. Сохраняем общие метаданные
 			metadataMutex.Lock()
-			deviceMetadataStore[strings.ToLower(item.ID)] = mtconnect.DataItemMetadata{
+			deviceMetadataStore[lowerId] = mtconnect.DataItemMetadata{
 				ID:            item.ID,
 				Name:          item.Name,
 				ComponentId:   comp.ID,
@@ -54,9 +65,26 @@ func extractDataItems(components []mtconnect.ProbeComponent) {
 				SubType:       item.SubType,
 			}
 			metadataMutex.Unlock()
+
+			// 2. Если компонент является осью, создаем связь для КАЖДОГО его DataItem'а
+			if isAxis && item.Type != "" {
+				link := mtconnect.AxisDataItemLink{
+					DeviceID:        deviceId,
+					AxisComponentID: comp.ID,
+					AxisName:        comp.Name,
+					AxisType:        componentType,
+					// Используем Type из DataItem как ключ для JSON
+					DataKey: strings.ToLower(item.Type),
+				}
+				axisLinksMutex.Lock()
+				axisDataItemLinks[lowerId] = link
+				axisLinksMutex.Unlock()
+			}
 		}
+
+		// Рекурсивно обходим дочерние компоненты
 		if comp.ComponentList != nil {
-			extractDataItems(comp.ComponentList.Components)
+			extractComponentMetadata(comp.ComponentList.Components, deviceId)
 		}
 	}
 }
@@ -76,8 +104,13 @@ func fetchAndParseProbe(endpointURL string) error {
 		return fmt.Errorf("не удалось распарсить /probe XML с %s: %w", probeURL, err)
 	}
 
-	// Извлекаем DataItem'ы из корневого устройства и всех его компонентов
 	for _, device := range devices.Devices {
+		deviceId := device.Name
+		if deviceId == "" {
+			deviceId = device.UUID
+		}
+
+		// Обрабатываем DataItem'ы на верхнем уровне устройства
 		for _, item := range device.DataItems {
 			metadataMutex.Lock()
 			deviceMetadataStore[strings.ToLower(item.ID)] = mtconnect.DataItemMetadata{
@@ -92,8 +125,9 @@ func fetchAndParseProbe(endpointURL string) error {
 			}
 			metadataMutex.Unlock()
 		}
+		// Запускаем рекурсивный обход для всех компонентов
 		if device.ComponentList != nil {
-			extractDataItems(device.ComponentList.Components)
+			extractComponentMetadata(device.ComponentList.Components, deviceId)
 		}
 	}
 	return nil
@@ -112,6 +146,7 @@ func main() {
 		}
 	}
 	log.Printf("Загружено %d уникальных DataItem'ов из всех /probe эндпоинтов.", len(deviceMetadataStore))
+	log.Printf("Загружено %d ссылок на DataItem'ы осей.", len(axisDataItemLinks))
 
 	store := &DataStore{
 		data: make(map[string]mtconnect.MachineData),
@@ -167,9 +202,11 @@ func processSingleEndpoint(endpointURL string, store *DataStore) {
 		return
 	}
 
-	// Передаем метаданные в маппер
+	// Передаем метаданные и связи осей в маппер
 	metadataMutex.RLock()
-	machineDataSlice := mtconnect.MapToMachineData(&streams, deviceMetadataStore)
+	axisLinksMutex.RLock()
+	machineDataSlice := mtconnect.MapToMachineData(&streams, deviceMetadataStore, axisDataItemLinks)
+	axisLinksMutex.RUnlock()
 	metadataMutex.RUnlock()
 
 	for _, machineData := range machineDataSlice {
