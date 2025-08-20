@@ -66,8 +66,9 @@ func extractComponentMetadata(components []mtconnect.ProbeComponent, deviceId st
 			}
 			metadataMutex.Unlock()
 
-			// 2. Если компонент является осью, создаем связь для КАЖДОГО его DataItem'а
-			if isAxis && item.Type != "" {
+			// 2. Если компонент является осью, создаем связь для всех его DataItem'ов,
+			// КРОМЕ AXIS_STATE, который обрабатывается отдельно.
+			if isAxis && item.Type != "" && item.Type != "AXIS_STATE" {
 				link := mtconnect.AxisDataItemLink{
 					DeviceID:        deviceId,
 					AxisComponentID: comp.ID,
