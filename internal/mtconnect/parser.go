@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Новая вспомогательная функция для обработки DataItem'ов, связанных с осями
+// Вспомогательная функция для обработки DataItem'ов, связанных с осями
 func processAxisDataItem(machineID string, dataItemId, value string, axisLinks map[string]AxisDataItemLink, axisInfoMap map[string]map[string]*AxisInfo) bool {
 	lowerId := strings.ToLower(dataItemId)
 	link, ok := axisLinks[lowerId]
@@ -13,34 +13,27 @@ func processAxisDataItem(machineID string, dataItemId, value string, axisLinks m
 		return false // Это не DataItem оси для текущего станка
 	}
 
-	// Находим или создаем карту осей для данного станка
 	if _, ok := axisInfoMap[machineID]; !ok {
 		axisInfoMap[machineID] = make(map[string]*AxisInfo)
 	}
-	// Находим или создаем конкретную ось по ее ID
 	if _, ok := axisInfoMap[machineID][link.AxisComponentID]; !ok {
 		axisInfoMap[machineID][link.AxisComponentID] = &AxisInfo{
 			ID:   link.AxisComponentID,
 			Name: link.AxisName,
 			Type: link.AxisType,
-			// Инициализируем карту для динамических данных
 			Data: make(map[string]interface{}),
 		}
 	}
 
 	axis := axisInfoMap[machineID][link.AxisComponentID]
-
-	// Добавляем или обновляем значение в карте по ключу, полученному из /probe
 	axis.Data[link.DataKey] = value
 
-	return true // DataItem был успешно обработан как данные оси
+	return true
 }
 
 // Преобразует необработанные данные MTConnectStreams в срез MachineData.
 func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMetadata, axisLinks map[string]AxisDataItemLink) []MachineData {
 	machineDataMap := make(map[string]*MachineData)
-	// Временное хранилище для актуальной информации об осях
-	// Ключ: machineID, Значение: (Ключ: axisComponentID, Значение: *AxisInfo)
 	axisInfoMap := make(map[string]map[string]*AxisInfo)
 
 	for _, deviceStream := range streams.Streams {
@@ -64,7 +57,7 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 				EmergencyStatus:     "UNAVAILABLE",
 				AlarmStatus:         "UNAVAILABLE",
 				WarningStatus:       "UNAVAILABLE",
-				Alarms:              "UNAVAILABLE",
+				Alarms:              make([]map[string]interface{}, 0),
 				HasAlarms:           "UNAVAILABLE",
 				EditStatus:          "UNAVAILABLE",
 				ManualMode:          "UNAVAILABLE",
@@ -73,7 +66,7 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 				BatteryStatus:       "UNAVAILABLE",
 				ActiveToolNumber:    "UNAVAILABLE",
 				ToolOffsetNumber:    "UNAVAILABLE",
-				AxisInfos:           make([]AxisInfo, 0), // Инициализируем пустым срезом
+				AxisInfos:           make([]AxisInfo, 0),
 			}
 		}
 		machine := machineDataMap[machineID]
@@ -84,9 +77,7 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 			// Обработка Samples
 			if compStream.Samples != nil {
 				for _, sample := range compStream.Samples.Items {
-					// Сначала пытаемся обработать как данные оси
 					if !processAxisDataItem(machine.MachineId, sample.DataItemId, sample.Value, axisLinks, axisInfoMap) {
-						// Если не получилось, обрабатываем как обычные данные
 						processDataItem(machine, sample.DataItemId, sample.Value, sample.Timestamp, metadata)
 					}
 				}
@@ -106,36 +97,51 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 				if !conditionsProcessedThisCycle {
 					machine.AlarmStatus = "NORMAL"
 					machine.WarningStatus = "NORMAL"
-					machine.Alarms = make([]AlarmDetail, 0)
+					machine.Alarms = make([]map[string]interface{}, 0)
 					conditionsProcessedThisCycle = true
 				}
 
 				for _, condition := range compStream.Condition.Items {
 					status := strings.ToUpper(condition.XMLName.Local)
 
+					// Мы собираем только FAULT и WARNING, но не NORMAL
 					if status == "FAULT" || status == "WARNING" {
-						message := condition.Value
-						if message == "" {
-							message = "No details provided"
-						}
-						componentName := compStream.Name
-						alarmType := condition.Type
+						alarm := make(map[string]interface{})
+
+						alarm["level"] = status // FAULT или WARNING
+
+						// Используем метаданные для получения более точного имени компонента
 						meta, ok := metadata[strings.ToLower(condition.DataItemId)]
 						if ok {
-							componentName = meta.ComponentName
+							alarm["componentName"] = meta.ComponentName
+							alarm["componentId"] = meta.ComponentId
+						} else {
+							// Откатываемся до информации из ComponentStream, если метаданные не найдены
+							alarm["componentName"] = compStream.Name
+							alarm["componentId"] = compStream.ComponentId
 						}
-						alarm := AlarmDetail{
-							Status:        status,
-							Type:          alarmType,
-							ComponentName: componentName,
-							Message:       message,
-							NativeCode:    condition.NativeCode,
+
+						// Динамически добавляем все непустые поля из XML
+						if condition.Type != "" {
+							alarm["type"] = condition.Type
 						}
-						if alarmList, ok := machine.Alarms.([]AlarmDetail); ok {
-							machine.Alarms = append(alarmList, alarm)
+						if condition.NativeCode != "" {
+							alarm["nativeCode"] = condition.NativeCode
 						}
+						if condition.Value != "" {
+							alarm["message"] = strings.TrimSpace(condition.Value)
+						}
+						if condition.DataItemId != "" {
+							alarm["dataItemId"] = condition.DataItemId
+						}
+						if condition.Timestamp != "" {
+							alarm["timestamp"] = condition.Timestamp
+						}
+
+						machine.Alarms = append(machine.Alarms, alarm)
 					}
 
+					// Обновляем общие статусы
 					if status == "FAULT" {
 						machine.AlarmStatus = "FAULT"
 					}
@@ -149,9 +155,7 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 
 	var machineDataSlice []MachineData
 	for machineID, data := range machineDataMap {
-		// Добавляем собранную информацию об осях в итоговую структуру
 		if machineAxes, ok := axisInfoMap[machineID]; ok {
-			// Сортируем оси по имени для консистентного вывода
 			keys := make([]string, 0, len(machineAxes))
 			for k := range machineAxes {
 				keys = append(keys, k)
@@ -209,7 +213,7 @@ func processDataItem(machine *MachineData, dataItemId, value, timestamp string, 
 		machine.ProgramMode = value
 		machine.HandleRetraceStatus = (value == "MANUAL")
 		machine.ManualMode = (value == "MANUAL" || value == "MANUAL_DATA_INPUT")
-	case "AXIS_STATE": // Этот блок оставлен для обратной совместимости с полем AxisMovementStatus
+	case "AXIS_STATE":
 		if _, isString := machine.AxisMovementStatus.(string); isString {
 			machine.AxisMovementStatus = make(map[string]string)
 		}
