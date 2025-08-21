@@ -74,7 +74,8 @@ func extractComponentMetadata(components []mtconnect.ProbeComponent, deviceId st
 			if isAxisOrSpindle && item.Type != "" && item.Type != "AXIS_STATE" {
 				dataKey := strings.ToLower(item.Type)
 
-				if componentType == "LINEAR" {
+				switch componentType {
+				case "LINEAR":
 					link := mtconnect.AxisDataItemLink{
 						DeviceID:        deviceId,
 						AxisComponentID: comp.ID,
@@ -85,7 +86,7 @@ func extractComponentMetadata(components []mtconnect.ProbeComponent, deviceId st
 					axisLinksMutex.Lock()
 					axisDataItemLinks[lowerId] = link
 					axisLinksMutex.Unlock()
-				} else if componentType == "ROTARY" {
+				case "ROTARY":
 					link := mtconnect.SpindleDataItemLink{
 						DeviceID:           deviceId,
 						SpindleComponentID: comp.ID,
