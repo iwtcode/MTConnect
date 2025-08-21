@@ -1,9 +1,30 @@
 package mtconnect
 
 import (
+	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+// formatAccumulatedTime преобразует строку с секундами в формат "ЧЧ:ММ:СС".
+func formatAccumulatedTime(secondsStr string) string {
+	secondsFloat, err := strconv.ParseFloat(secondsStr, 64)
+	if err != nil {
+		// Если не удается распарсить, возвращаем исходное значение
+		return secondsStr
+	}
+
+	// Округляем до ближайшей целой секунды
+	totalSeconds := int(math.Round(secondsFloat))
+
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
+
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+}
 
 // Вспомогательная функция для обработки DataItem'ов, связанных с осями
 func processAxisDataItem(machineID string, dataItemId, value string, axisLinks map[string]AxisDataItemLink, axisInfoMap map[string]map[string]*AxisInfo) bool {
@@ -31,10 +52,37 @@ func processAxisDataItem(machineID string, dataItemId, value string, axisLinks m
 	return true
 }
 
+// Вспомогательная функция для обработки DataItem'ов, связанных со шпинделями
+func processSpindleDataItem(machineID string, dataItemId, value string, spindleLinks map[string]SpindleDataItemLink, spindleInfoMap map[string]map[string]*SpindleInfo) bool {
+	lowerId := strings.ToLower(dataItemId)
+	link, ok := spindleLinks[lowerId]
+	if !ok || link.DeviceID != machineID {
+		return false // Это не DataItem шпинделя для текущего станка
+	}
+
+	if _, ok := spindleInfoMap[machineID]; !ok {
+		spindleInfoMap[machineID] = make(map[string]*SpindleInfo)
+	}
+	if _, ok := spindleInfoMap[machineID][link.SpindleComponentID]; !ok {
+		spindleInfoMap[machineID][link.SpindleComponentID] = &SpindleInfo{
+			ID:   link.SpindleComponentID,
+			Name: link.SpindleName,
+			Type: link.SpindleType,
+			Data: make(map[string]interface{}),
+		}
+	}
+
+	spindle := spindleInfoMap[machineID][link.SpindleComponentID]
+	spindle.Data[link.DataKey] = value
+
+	return true
+}
+
 // Преобразует необработанные данные MTConnectStreams в срез MachineData.
-func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMetadata, axisLinks map[string]AxisDataItemLink) []MachineData {
+func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMetadata, axisLinks map[string]AxisDataItemLink, spindleLinks map[string]SpindleDataItemLink) []MachineData {
 	machineDataMap := make(map[string]*MachineData)
 	axisInfoMap := make(map[string]map[string]*AxisInfo)
+	spindleInfoMap := make(map[string]map[string]*SpindleInfo)
 
 	for _, deviceStream := range streams.Streams {
 		machineID := deviceStream.Name
@@ -69,6 +117,11 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 				FeedOverride:        make(map[string]string),
 				Alarms:              make([]map[string]interface{}, 0),
 				HasAlarms:           "UNAVAILABLE",
+				PartsCount:          make(map[string]string),
+				AccumulatedTime:     make(map[string]string),
+				SpindleInfos:        make([]SpindleInfo, 0),
+				ContourFeedRate:     "UNAVAILABLE",
+				JogOverride:         "UNAVAILABLE",
 			}
 		}
 		machine := machineDataMap[machineID]
@@ -79,7 +132,9 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 			// Обработка Samples
 			if compStream.Samples != nil {
 				for _, sample := range compStream.Samples.Items {
-					if !processAxisDataItem(machine.MachineId, sample.DataItemId, sample.Value, axisLinks, axisInfoMap) {
+					isAxis := processAxisDataItem(machine.MachineId, sample.DataItemId, sample.Value, axisLinks, axisInfoMap)
+					isSpindle := processSpindleDataItem(machine.MachineId, sample.DataItemId, sample.Value, spindleLinks, spindleInfoMap)
+					if !isAxis && !isSpindle {
 						processDataItem(machine, sample.DataItemId, sample.Value, sample.Timestamp, metadata)
 					}
 				}
@@ -88,7 +143,9 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 			// Обработка Events
 			if compStream.Events != nil {
 				for _, event := range compStream.Events.Items {
-					if !processAxisDataItem(machine.MachineId, event.DataItemId, event.Value, axisLinks, axisInfoMap) {
+					isAxis := processAxisDataItem(machine.MachineId, event.DataItemId, event.Value, axisLinks, axisInfoMap)
+					isSpindle := processSpindleDataItem(machine.MachineId, event.DataItemId, event.Value, spindleLinks, spindleInfoMap)
+					if !isAxis && !isSpindle {
 						processDataItem(machine, event.DataItemId, event.Value, event.Timestamp, metadata)
 					}
 				}
@@ -157,6 +214,7 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 
 	var machineDataSlice []MachineData
 	for machineID, data := range machineDataMap {
+		// Добавляем отсортированные данные по осям
 		if machineAxes, ok := axisInfoMap[machineID]; ok {
 			keys := make([]string, 0, len(machineAxes))
 			for k := range machineAxes {
@@ -165,6 +223,18 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 			sort.Strings(keys)
 			for _, key := range keys {
 				data.AxisInfos = append(data.AxisInfos, *machineAxes[key])
+			}
+		}
+
+		// Добавляем отсортированные данные по шпинделям
+		if machineSpindles, ok := spindleInfoMap[machineID]; ok {
+			keys := make([]string, 0, len(machineSpindles))
+			for k := range machineSpindles {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				data.SpindleInfos = append(data.SpindleInfos, *machineSpindles[key])
 			}
 		}
 
@@ -186,18 +256,13 @@ func MapToMachineData(streams *MTConnectStreams, metadata map[string]DataItemMet
 			}
 		}
 
-		// Если карты пустые после обработки, устанавливаем "UNAVAILABLE" для отображения в JSON
-		// В данном случае, так как мы хотим видеть пустые объекты, если данных нет,
-		// или соответствующие данные, если они есть, нет необходимости устанавливать "UNAVAILABLE"
-		// для самой карты. Пустая карта JSON будет отображена как {}.
-
 		machineDataSlice = append(machineDataSlice, *data)
 	}
 
 	return machineDataSlice
 }
 
-// Логика сопоставления для всех остальных (не осевых) данных.
+// Логика сопоставления для всех остальных (не осевых и не шпиндельных) данных.
 func processDataItem(machine *MachineData, dataItemId, value, timestamp string, metadata map[string]DataItemMetadata) {
 	meta, ok := metadata[strings.ToLower(dataItemId)]
 	if !ok {
@@ -239,16 +304,63 @@ func processDataItem(machine *MachineData, dataItemId, value, timestamp string, 
 	case "TOOL_OFFSET":
 		machine.ToolOffsetNumber = value
 	case "PATH_FEEDRATE":
-		key := strings.ToUpper(meta.SubType)
+		key := meta.SubType
 		if key == "" {
 			key = "VALUE"
 		}
 		machine.FeedRate[key] = value
 	case "PATH_FEEDRATE_OVERRIDE":
-		key := strings.ToUpper(meta.SubType)
+		key := meta.SubType
 		if key == "" {
 			key = "VALUE"
 		}
 		machine.FeedOverride[key] = value
+	case "PART_COUNT":
+		key := meta.SubType
+		if key == "" {
+			key = "ALL"
+		}
+		machine.PartsCount[key] = value
+	case "ACCUMULATED_TIME":
+		key := meta.SubType
+		if key == "" {
+			key = "VALUE"
+		}
+		machine.AccumulatedTime[key] = formatAccumulatedTime(value)
+	case "BLOCK":
+		if machine.CurrentProgram == nil {
+			machine.CurrentProgram = &CurrentProgramInfo{}
+		}
+		machine.CurrentProgram.Block = value
+	case "PROGRAM":
+		if machine.CurrentProgram == nil {
+			machine.CurrentProgram = &CurrentProgramInfo{}
+		}
+		machine.CurrentProgram.Program = value
+	case "PROGRAM_COMMENT":
+		if machine.CurrentProgram == nil {
+			machine.CurrentProgram = &CurrentProgramInfo{}
+		}
+		machine.CurrentProgram.ProgramComment = value
+	case "PROGRAM_HEADER":
+		if machine.CurrentProgram == nil {
+			machine.CurrentProgram = &CurrentProgramInfo{}
+		}
+		machine.CurrentProgram.ProgramHeader = value
+	case "LINE":
+		if machine.CurrentProgram == nil {
+			machine.CurrentProgram = &CurrentProgramInfo{}
+		}
+		machine.CurrentProgram.Line = value
+	case "LINE_NUMBER":
+		if machine.CurrentProgram == nil {
+			machine.CurrentProgram = &CurrentProgramInfo{}
+		}
+		machine.CurrentProgram.LineNumber = value
+	case "LINE_LABEL":
+		if machine.CurrentProgram == nil {
+			machine.CurrentProgram = &CurrentProgramInfo{}
+		}
+		machine.CurrentProgram.LineLabel = value
 	}
 }

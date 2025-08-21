@@ -42,11 +42,15 @@ var metadataMutex = &sync.RWMutex{}
 var axisDataItemLinks = make(map[string]mtconnect.AxisDataItemLink)
 var axisLinksMutex = &sync.RWMutex{}
 
+// Глобальное хранилище связей шпинделей: ключ - dataItemId, значение - информация о связи со шпинделем
+var spindleDataItemLinks = make(map[string]mtconnect.SpindleDataItemLink)
+var spindleLinksMutex = &sync.RWMutex{}
+
 // Рекурсивная функция для извлечения метаданных из всех компонентов
 func extractComponentMetadata(components []mtconnect.ProbeComponent, deviceId string) {
 	for _, comp := range components {
 		componentType := strings.ToUpper(comp.XMLName.Local)
-		isAxis := componentType == "LINEAR" || componentType == "ROTARY"
+		isAxisOrSpindle := componentType == "LINEAR" || componentType == "ROTARY"
 
 		// Обрабатываем DataItem'ы внутри текущего компонента
 		for _, item := range comp.DataItems {
@@ -66,19 +70,33 @@ func extractComponentMetadata(components []mtconnect.ProbeComponent, deviceId st
 			}
 			metadataMutex.Unlock()
 
-			// 2. Если компонент является осью, создаем связь для всех его DataItem'ов,
-			// КРОМЕ AXIS_STATE, который обрабатывается отдельно.
-			if isAxis && item.Type != "" && item.Type != "AXIS_STATE" {
-				link := mtconnect.AxisDataItemLink{
-					DeviceID:        deviceId,
-					AxisComponentID: comp.ID,
-					AxisName:        comp.Name,
-					AxisType:        componentType,
-					DataKey:         strings.ToLower(item.Type),
+			// 2. Если компонент является осью (LINEAR) или шпинделем (ROTARY), создаем соответствующую связь
+			if isAxisOrSpindle && item.Type != "" && item.Type != "AXIS_STATE" {
+				dataKey := strings.ToLower(item.Type)
+
+				if componentType == "LINEAR" {
+					link := mtconnect.AxisDataItemLink{
+						DeviceID:        deviceId,
+						AxisComponentID: comp.ID,
+						AxisName:        comp.Name,
+						AxisType:        componentType,
+						DataKey:         dataKey,
+					}
+					axisLinksMutex.Lock()
+					axisDataItemLinks[lowerId] = link
+					axisLinksMutex.Unlock()
+				} else if componentType == "ROTARY" {
+					link := mtconnect.SpindleDataItemLink{
+						DeviceID:           deviceId,
+						SpindleComponentID: comp.ID,
+						SpindleName:        comp.Name,
+						SpindleType:        componentType,
+						DataKey:            dataKey,
+					}
+					spindleLinksMutex.Lock()
+					spindleDataItemLinks[lowerId] = link
+					spindleLinksMutex.Unlock()
 				}
-				axisLinksMutex.Lock()
-				axisDataItemLinks[lowerId] = link
-				axisLinksMutex.Unlock()
 			}
 		}
 
@@ -147,6 +165,7 @@ func main() {
 	}
 	log.Printf("Загружено %d уникальных DataItem'ов из всех /probe эндпоинтов.", len(deviceMetadataStore))
 	log.Printf("Загружено %d ссылок на DataItem'ы осей.", len(axisDataItemLinks))
+	log.Printf("Загружено %d ссылок на DataItem'ы шпинделей.", len(spindleDataItemLinks))
 
 	store := &DataStore{
 		data: make(map[string]mtconnect.MachineData),
@@ -202,10 +221,12 @@ func processSingleEndpoint(endpointURL string, store *DataStore) {
 		return
 	}
 
-	// Передаем метаданные и связи осей в маппер
+	// Передаем метаданные и связи осей/шпинделей в маппер
 	metadataMutex.RLock()
 	axisLinksMutex.RLock()
-	machineDataSlice := mtconnect.MapToMachineData(&streams, deviceMetadataStore, axisDataItemLinks)
+	spindleLinksMutex.RLock()
+	machineDataSlice := mtconnect.MapToMachineData(&streams, deviceMetadataStore, axisDataItemLinks, spindleDataItemLinks)
+	spindleLinksMutex.RUnlock()
 	axisLinksMutex.RUnlock()
 	metadataMutex.RUnlock()
 

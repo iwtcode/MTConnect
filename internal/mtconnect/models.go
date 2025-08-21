@@ -11,34 +11,59 @@ type AxisInfo struct {
 	Data map[string]interface{} `json:"data"`
 }
 
+// SpindleInfo содержит актуальную информацию о состоянии одного шпинделя станка
+type SpindleInfo struct {
+	ID   string                 `json:"id"`
+	Name string                 `json:"name"`
+	Type string                 `json:"type"`
+	Data map[string]interface{} `json:"data"`
+}
+
+// CurrentProgramInfo содержит информацию о текущей выполняемой программе
+type CurrentProgramInfo struct {
+	Block          string `json:"BLOCK,omitempty"`
+	Program        string `json:"PROGRAM,omitempty"`
+	ProgramComment string `json:"PROGRAM_COMMENT,omitempty"`
+	ProgramHeader  string `json:"PROGRAM_HEADER,omitempty"`
+	Line           string `json:"LINE,omitempty"`
+	LineNumber     string `json:"LINE_NUMBER,omitempty"`
+	LineLabel      string `json:"LINE_LABEL,omitempty"`
+}
+
 // Конечная модель данных для одного станка
 type MachineData struct {
-	MachineId           string                   `json:"MachineId"`           // Идентификатор станка
-	Id                  string                   `json:"Id"`                  // Идентификатор станка
-	Timestamp           string                   `json:"Timestamp"`           // Временная метка
-	IsEnabled           interface{}              `json:"IsEnabled"`           // Станок включен
-	IsInEmergency       interface{}              `json:"IsInEmergency"`       // Аварийный статус
-	MachineState        string                   `json:"MachineState"`        // Статус выполнения программы
-	ProgramMode         string                   `json:"ProgramMode"`         // Режим работы (MDI / MEM / EDIT)
-	TmMode              string                   `json:"TmMode"`              // ЗАГЛУШКА: Режим T/M
-	HandleRetraceStatus interface{}              `json:"HandleRetraceStatus"` // Статус ручного перемещения
-	AxisMovementStatus  interface{}              `json:"AxisMovementStatus"`  // Статус движения осей
-	MstbStatus          string                   `json:"MstbStatus"`          // ЗАГЛУШКА: Статус M/S/T/B
-	EmergencyStatus     string                   `json:"EmergencyStatus"`     // Статус аварийного стопа
-	AlarmStatus         string                   `json:"AlarmStatus"`         // Общий статус тревоги
-	EditStatus          string                   `json:"EditStatus"`          // Статус редактирования программы
-	ManualMode          interface{}              `json:"ManualMode"`          // Ручной режим (MANUAL или MDI)
-	WriteStatus         string                   `json:"WriteStatus"`         // Статус записи (аналог EditStatus)
-	LabelSkipStatus     interface{}              `json:"LabelSkipStatus"`     // ЗАГЛУШКА: Статус пропуска метки
-	WarningStatus       string                   `json:"WarningStatus"`       // Общий статус предупреждения
-	BatteryStatus       interface{}              `json:"BatteryStatus"`       // Статус батареи (включена/выключена)
-	ActiveToolNumber    string                   `json:"activeToolNumber"`    // Номер активного инструмента
-	ToolOffsetNumber    string                   `json:"toolOffsetNumber"`    // Номер смещения инструмента.
-	AxisInfos           []AxisInfo               `json:"AxisInfos"`           // подробная информация об осях
-	FeedRate            map[string]string        `json:"FeedRate"`            // Текущая подача (по подтипам)
-	FeedOverride        map[string]string        `json:"FeedOverride"`        // Корректор подачи (%) (по подтипам)
-	Alarms              []map[string]interface{} `json:"Alarms"`              // Список тревог (теперь динамический)
-	HasAlarms           interface{}              `json:"hasAlarms"`           // Флаг наличия активных тревог
+	MachineId           string                   `json:"MachineId"`                // Идентификатор станка
+	Id                  string                   `json:"Id"`                       // Идентификатор станка
+	Timestamp           string                   `json:"Timestamp"`                // Временная метка
+	IsEnabled           interface{}              `json:"IsEnabled"`                // Станок включен
+	IsInEmergency       interface{}              `json:"IsInEmergency"`            // Аварийный статус
+	MachineState        string                   `json:"MachineState"`             // Статус выполнения программы
+	ProgramMode         string                   `json:"ProgramMode"`              // Режим работы (MDI / MEM / EDIT)
+	TmMode              string                   `json:"TmMode"`                   // ЗАГЛУШКА: Режим T/M
+	HandleRetraceStatus interface{}              `json:"HandleRetraceStatus"`      // Статус ручного перемещения
+	AxisMovementStatus  interface{}              `json:"AxisMovementStatus"`       // Статус движения осей
+	MstbStatus          string                   `json:"MstbStatus"`               // ЗАГЛУШКА: Статус M/S/T/B
+	EmergencyStatus     string                   `json:"EmergencyStatus"`          // Статус аварийного стопа
+	AlarmStatus         string                   `json:"AlarmStatus"`              // Общий статус тревоги
+	EditStatus          string                   `json:"EditStatus"`               // Статус редактирования программы
+	ManualMode          interface{}              `json:"ManualMode"`               // Ручной режим (MANUAL или MDI)
+	WriteStatus         string                   `json:"WriteStatus"`              // Статус записи (аналог EditStatus)
+	LabelSkipStatus     interface{}              `json:"LabelSkipStatus"`          // ЗАГЛУШКА: Статус пропуска метки
+	WarningStatus       string                   `json:"WarningStatus"`            // Общий статус предупреждения
+	BatteryStatus       interface{}              `json:"BatteryStatus"`            // Статус батареи (включена/выключена)
+	ActiveToolNumber    string                   `json:"activeToolNumber"`         // Номер активного инструмента
+	ToolOffsetNumber    string                   `json:"toolOffsetNumber"`         // Номер смещения инструмента.
+	AxisInfos           []AxisInfo               `json:"AxisInfos"`                // подробная информация об осях
+	FeedRate            map[string]string        `json:"FeedRate"`                 // Текущая подача (по подтипам)
+	FeedOverride        map[string]string        `json:"FeedOverride"`             // Корректор подачи (%) (по подтипам)
+	Alarms              []map[string]interface{} `json:"Alarms"`                   // Список тревог (теперь динамический)
+	HasAlarms           interface{}              `json:"hasAlarms"`                // Флаг наличия активных тревог
+	PartsCount          map[string]string        `json:"PartsCount"`               // Количество изготовленных деталей
+	AccumulatedTime     map[string]string        `json:"AccumulatedTime"`          // Общее время работы (по подтипам)
+	CurrentProgram      *CurrentProgramInfo      `json:"CurrentProgram,omitempty"` // Информация о текущей программе
+	SpindleInfos        []SpindleInfo            `json:"SpindleInfos"`             // Информация о шпинделях
+	ContourFeedRate     interface{}              `json:"ContourFeedRate"`          // ЗАГЛУШКА: Контурная подача (F)
+	JogOverride         interface{}              `json:"JogOverride"`              // ЗАГЛУШКА: "Корректор JOG%"
 }
 
 // Хранит метаданные из /probe для каждого DataItem
@@ -60,6 +85,15 @@ type AxisDataItemLink struct {
 	AxisName        string
 	AxisType        string
 	DataKey         string
+}
+
+// Структура для связи DataItem'а с конкретным шпинделем
+type SpindleDataItemLink struct {
+	DeviceID           string
+	SpindleComponentID string
+	SpindleName        string
+	SpindleType        string
+	DataKey            string
 }
 
 // --- Структуры для парсинга /probe ---
