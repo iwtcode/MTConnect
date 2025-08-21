@@ -236,7 +236,7 @@ curl -H "Accept: application/json" http://localhost:8080/api/Mazak/current
 
 ```
 MTConnect/
-├── build
+├── build/
 │   ├── windows_mtc.exe # Точка входа для Windows
 │   ├── linux_mtc       # Точка входа для Linux
 │   └── macos_mtc       # Точка входа для MacOS
@@ -254,6 +254,7 @@ MTConnect/
 │       └── parser.go   # Логика парсинга
 ├── go.mod
 ├── go.sum
+├── LICENSE
 └── README.md
 ```
 
