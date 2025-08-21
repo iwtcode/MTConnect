@@ -63,7 +63,7 @@ type MachineData struct {
 	CurrentProgram      *CurrentProgramInfo      `json:"CurrentProgram,omitempty"` // Информация о текущей программе
 	SpindleInfos        []SpindleInfo            `json:"SpindleInfos"`             // Информация о шпинделях
 	ContourFeedRate     interface{}              `json:"ContourFeedRate"`          // ЗАГЛУШКА: Контурная подача (F)
-	JogOverride         interface{}              `json:"JogOverride"`              // ЗАГЛУШКА: "Корректор JOG%"
+	JogOverride         interface{}              `json:"JogOverride"`              // ЗАГЛУШКА: Корректор JOG%
 }
 
 // Хранит метаданные из /probe для каждого DataItem
