@@ -8,8 +8,8 @@ type UseCases struct {
 }
 
 // NewUsecases - конструктор для UseCases
-func NewUsecases(repo interfaces.Repository) interfaces.Usecases {
+func NewUsecases(repo interfaces.Repository, poll_service interfaces.PollingService) interfaces.Usecases {
 	return &UseCases{
-		MachineUsecase: NewMachineUsecase(repo),
+		MachineUsecase: NewMachineUsecase(repo, poll_service),
 	}
 }

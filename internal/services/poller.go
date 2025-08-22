@@ -1,23 +1,31 @@
 package services
 
 import (
+	"MTConnect/internal/config"
+	"MTConnect/internal/domain/entities"
+	"MTConnect/internal/interfaces"
+	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
 	"time"
-
-	"MTConnect/internal/config"
-	"MTConnect/internal/domain/entities"
-	"MTConnect/internal/interfaces"
 )
+
+// activePoll хранит информацию о запущенном процессе опроса для одного станка
+type activePoll struct {
+	ticker *time.Ticker
+	done   chan bool
+}
 
 type PollingService struct {
 	cfg                  *config.AppConfig
 	repo                 interfaces.DataStoreRepository
-	ticker               *time.Ticker
-	done                 chan bool
+	producer             interfaces.DataProducer
+	activePolls          map[string]*activePoll
+	pollsMutex           sync.Mutex
 	deviceMetadataStore  map[string]entities.DataItemMetadata
 	axisDataItemLinks    map[string]entities.AxisDataItemLink
 	spindleDataItemLinks map[string]entities.SpindleDataItemLink
@@ -26,44 +34,109 @@ type PollingService struct {
 	spindleLinksMutex    sync.RWMutex
 }
 
-func NewPollingService(cfg *config.AppConfig, repo interfaces.DataStoreRepository) interfaces.PollingService {
-	return &PollingService{
+func NewPollingService(cfg *config.AppConfig, repo interfaces.DataStoreRepository, producer interfaces.DataProducer) interfaces.PollingService {
+	ps := &PollingService{
 		cfg:                  cfg,
 		repo:                 repo,
-		done:                 make(chan bool),
+		producer:             producer,
+		activePolls:          make(map[string]*activePoll),
 		deviceMetadataStore:  make(map[string]entities.DataItemMetadata),
 		axisDataItemLinks:    make(map[string]entities.AxisDataItemLink),
 		spindleDataItemLinks: make(map[string]entities.SpindleDataItemLink),
 	}
+	ps.loadInitialMetadata() // Загружаем метаданные при создании сервиса
+	return ps
 }
 
-func (s *PollingService) StartPolling() {
-	s.loadInitialMetadata()
-	s.pollAllEndpoints()
-
-	s.ticker = time.NewTicker(1 * time.Second)
-	for {
-		select {
-		case <-s.done:
-			return
-		case <-s.ticker.C:
-			s.pollAllEndpoints()
+// findEndpointByMachineId ищет URL эндпоинта по ID станка
+func (s *PollingService) findEndpointByMachineId(machineId string) (string, error) {
+	for _, endpoint := range s.cfg.Endpoints {
+		if strings.HasSuffix(strings.ToLower(endpoint), strings.ToLower(machineId)) {
+			return endpoint, nil
 		}
 	}
+	return "", fmt.Errorf("эндпоинт для станка '%s' не найден в конфигурации", machineId)
 }
 
-func (s *PollingService) StopPolling() {
-	if s.ticker != nil {
-		s.ticker.Stop()
+func (s *PollingService) StartPollingForMachine(machineId string, interval time.Duration) error {
+	s.pollsMutex.Lock()
+	defer s.pollsMutex.Unlock()
+
+	if _, exists := s.activePolls[machineId]; exists {
+		return fmt.Errorf("опрос для станка '%s' уже запущен", machineId)
 	}
-	s.done <- true
-}
 
-func (s *PollingService) pollAllEndpoints() {
-	for _, endpointURL := range s.cfg.Endpoints {
+	endpointURL, err := s.findEndpointByMachineId(machineId)
+	if err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(interval)
+	done := make(chan bool)
+
+	s.activePolls[machineId] = &activePoll{
+		ticker: ticker,
+		done:   done,
+	}
+
+	go func() {
+		log.Printf("Запуск опроса для '%s' с интервалом %v", machineId, interval)
 		currentURL := strings.TrimSuffix(endpointURL, "/") + "/current"
-		s.processSingleEndpoint(currentURL)
+		for {
+			select {
+			case <-done:
+				log.Printf("Остановлен опрос для '%s'", machineId)
+				return
+			case <-ticker.C:
+				s.processSingleEndpoint(currentURL)
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (s *PollingService) StopPollingForMachine(machineId string) error {
+	s.pollsMutex.Lock()
+	defer s.pollsMutex.Unlock()
+
+	poll, exists := s.activePolls[machineId]
+	if !exists {
+		return fmt.Errorf("опрос для станка '%s' не был запущен", machineId)
 	}
+
+	poll.ticker.Stop()
+	poll.done <- true
+	close(poll.done)
+	delete(s.activePolls, machineId)
+
+	return nil
+}
+
+func (s *PollingService) StopAllPolling() {
+	s.pollsMutex.Lock()
+	defer s.pollsMutex.Unlock()
+	log.Println("Остановка всех процессов опроса...")
+	for machineId, poll := range s.activePolls {
+		poll.ticker.Stop()
+		poll.done <- true
+		close(poll.done)
+		delete(s.activePolls, machineId)
+	}
+	log.Println("Все процессы опроса остановлены.")
+}
+
+func (s *PollingService) CheckConnection(machineId string) error {
+	endpointURL, err := s.findEndpointByMachineId(machineId)
+	if err != nil {
+		return err
+	}
+	probeURL := strings.TrimSuffix(endpointURL, "/") + "/probe"
+	_, err = FetchXML(probeURL)
+	if err != nil {
+		return fmt.Errorf("проверка соединения со станком '%s' провалена: %w", machineId, err)
+	}
+	return nil
 }
 
 func (s *PollingService) processSingleEndpoint(endpointURL string) {
@@ -89,11 +162,24 @@ func (s *PollingService) processSingleEndpoint(endpointURL string) {
 
 	for _, machineData := range machineDataSlice {
 		if machineData.MachineId != "" {
+			// 1. Сохраняем в локальное хранилище
 			s.repo.Set(machineData.MachineId, machineData)
+
+			// 2. Отправляем в Kafka
+			jsonData, err := json.Marshal(machineData)
+			if err != nil {
+				log.Printf("ОШИБКА: не удалось сериализовать MachineData для Kafka: %v", err)
+				continue
+			}
+			err = s.producer.Produce(context.Background(), []byte(machineData.MachineId), jsonData)
+			if err != nil {
+				log.Printf("ОШИБКА: не удалось отправить данные в Kafka для станка %s: %v", machineData.MachineId, err)
+			}
 		}
 	}
 }
 
+// ... (остальные функции loadInitialMetadata, fetchAndParseProbe, extractComponentMetadata остаются без изменений) ...
 func (s *PollingService) loadInitialMetadata() {
 	for _, endpoint := range s.cfg.Endpoints {
 		if err := s.fetchAndParseProbe(endpoint); err != nil {

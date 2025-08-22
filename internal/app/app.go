@@ -1,17 +1,17 @@
 package app
 
 import (
-	"context"
-	"log"
-	"net/http"
-	"time"
-
 	"MTConnect/internal/adapters/handlers"
+	"MTConnect/internal/adapters/producers"
 	"MTConnect/internal/adapters/repositories/datastore"
 	"MTConnect/internal/config"
 	"MTConnect/internal/interfaces"
 	"MTConnect/internal/services"
 	"MTConnect/internal/usecases"
+	"context"
+	"log"
+	"net/http"
+	"time"
 
 	"go.uber.org/fx"
 )
@@ -22,6 +22,7 @@ func New() *fx.App {
 		// Регистрируем все модули приложения
 		ConfigModule,
 		RepositoryModule,
+		ProducerModule, // Новый модуль для Kafka
 		ServiceModule,
 		UsecaseModule,
 		HttpServerModule,
@@ -48,6 +49,13 @@ var RepositoryModule = fx.Module("repository_module",
 	),
 )
 
+var ProducerModule = fx.Module("producer_module",
+	fx.Provide(
+		// Продюсер для отправки данных (например, в Kafka)
+		producers.NewKafkaProducer,
+	),
+)
+
 var ServiceModule = fx.Module("service_module",
 	fx.Provide(
 		// Сервис для опроса MTConnect эндпоинтов
@@ -69,8 +77,8 @@ var HttpServerModule = fx.Module("http_server_module",
 		// Роутер
 		handlers.ProvideRouter,
 	),
-	// Запускаем сервер и сервис опроса при старте приложения
-	fx.Invoke(InvokeHttpServer, InvokePollingService),
+	// Запускаем сервер при старте приложения
+	fx.Invoke(InvokeHttpServer, InvokeGracefulShutdown),
 )
 
 // InvokeHttpServer запускает HTTP-сервер
@@ -100,17 +108,17 @@ func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler) {
 	})
 }
 
-// InvokePollingService запускает фоновый опрос эндпоинтов
-func InvokePollingService(lc fx.Lifecycle, poller interfaces.PollingService) {
+// InvokeGracefulShutdown обеспечивает корректное завершение работы сервисов
+func InvokeGracefulShutdown(lc fx.Lifecycle, poller interfaces.PollingService, producer interfaces.DataProducer) {
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			log.Println("Запуск сервиса опроса MTConnect эндпоинтов...")
-			go poller.StartPolling()
-			return nil
-		},
 		OnStop: func(ctx context.Context) error {
-			log.Println("Остановка сервиса опроса.")
-			poller.StopPolling()
+			log.Println("Корректное завершение работы сервисов...")
+			poller.StopAllPolling()
+			if err := producer.Close(); err != nil {
+				log.Printf("Ошибка при закрытии Kafka продюсера: %v", err)
+				return err
+			}
+			log.Println("Все сервисы успешно остановлены.")
 			return nil
 		},
 	})

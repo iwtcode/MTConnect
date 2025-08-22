@@ -1,0 +1,39 @@
+# 'version' больше не требуется, можно удалить
+services:
+  kafka:
+    image: bitnami/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      # --- Конфигурация KRaft (без Zookeeper) ---
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+
+      # --- Конфигурация для подключения клиентов ---
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+      - ALLOW_PLAINTEXT_LISTENER=yes
+
+      # KAFKA_CREATE_TOPICS убираем, так как мы управляем этим процессом сами
+    
+    # Переопределяем команду по умолчанию для решения проблемы "гонки состояний"
+    command:
+      - /bin/bash
+      - -c
+      - |
+        # 1. Запускаем стандартный скрипт входа и запуска Kafka в фоновом режиме
+        /opt/bitnami/scripts/kafka/entrypoint.sh /opt/bitnami/scripts/kafka/run.sh &
+        
+        # 2. Ждем, пока Kafka начнет слушать порт 9092 (используем утилиту Bitnami)
+        echo "Ожидание готовности Kafka..."
+        cub wait-for localhost:9092 --timeout 120
+        
+        # 3. Создаем топик (флаг --if-not-exists предотвратит ошибки при перезапуске)
+        echo "Kafka готова. Создание топика 'mtconnect_data'..."
+        kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic mtconnect_data --partitions 1 --replication-factor 1
+        
+        # 4. Возвращаем процесс Kafka на передний план, чтобы контейнер продолжал работать
+        wait $!

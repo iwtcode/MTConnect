@@ -7,8 +7,10 @@ import (
 
 // AppConfig содержит конфигурацию приложения
 type AppConfig struct {
-	ServerPort string   `json:"server_port"`
-	Endpoints  []string `json:"endpoints"`
+	ServerPort   string   `json:"server_port"`
+	KafkaBrokers []string `json:"kafka_brokers"`
+	KafkaTopic   string   `json:"kafka_topic"`
+	Endpoints    []string `json:"endpoints"`
 }
 
 // LoadConfiguration загружает конфигурацию из файла
