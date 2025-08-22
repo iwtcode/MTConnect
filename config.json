@@ -1,0 +1,8 @@
+{
+  "server_port": "8080",
+  "endpoints": [
+    "http://localhost:5001/Mazak",
+    "http://localhost:5001/OKUMA",
+    "https://smstestbed.nist.gov/vds"
+  ]
+}

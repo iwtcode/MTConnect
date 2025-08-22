@@ -7,7 +7,7 @@
             "request": "launch",
             "mode": "auto",
             "console": "integratedTerminal",
-            "program": "${workspaceFolder}/cmd/main.go",
+            "program": "${workspaceFolder}/cmd/app/main.go",
             "cwd": "${workspaceFolder}"
         }
     ]

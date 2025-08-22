@@ -42,17 +42,21 @@ git clone https://github.com/iwtcode/MTConnect.git
 cd MTConnect
 ```
 
-2️⃣ **Запуск приложения на Windows / Linux / MacOS**
-
+2️⃣ **Запуск приложения**
 ```
+# Windows
 ./build/windows_mtc.exe
+
+# Linux
 ./build/linux_mtc
+
+# macOS
 ./build/macos_mtc
 ```
 
 ## ⚙️ Конфигурация
 
-Добавьте в файл `config/config.json` свои эндпоинты:
+Добавьте в файл `config.json` свои эндпоинты:
 
 ```json
 {
@@ -236,24 +240,23 @@ curl -H "Accept: application/json" http://localhost:8080/api/Mazak/current
 
 ```
 MTConnect/
-├── build/
-│   ├── windows_mtc.exe # Точка входа для Windows
-│   ├── linux_mtc       # Точка входа для Linux
-│   └── macos_mtc       # Точка входа для MacOS
-├── cmd/
-│   └── main.go         # Точка входа для Golang
-├── config/
-│   ├── config.go       # Конфигурационные структуры
-│   └── config.json     # Файл конфигурации
-├── internal/
-|   └── build/
-|       └── build.go    # Скрипт для сборки
-│   └── mtconnect/
-│       ├── client.go   # HTTP клиент для MTConnect
-│       ├── models.go   # Структуры данных
-│       └── parser.go   # Логика парсинга
-├── go.mod
-├── go.sum
+├── cmd/app/              # Главная точка входа приложения
+├── internal/             # Внутренняя логика
+│   ├── app/              # Сборка и запуск приложения (с использованием FX)
+│   ├── config/           # Логика загрузки конфигурации
+│   ├── adapters/         # Адаптеры к внешним системам (HTTP, хранилища)
+│   │   ├── handlers/     # Обработчики HTTP-запросов (Gin)
+│   │   └── repositories/ # Реализации репозиториев (in-memory store)
+│   ├── domain/           # Основные бизнес-сущности и модели
+│   │   └── entities/     # Структуры данных (MTConnect, MachineData)
+│   ├── interfaces/       # Go-интерфейсы для слоев (Dependency Inversion)
+│   ├── services/         # Конкретные сервисы (опрос эндпоинтов, парсинг XML)
+│   └── usecases/         # Сценарии использования (основная бизнес-логика)
+├── tools/                # Инструменты для сборки и разработки
+│   └── build/            # Скрипт для сборки исполняемых файлов
+├── config.json           # Файл конфигурации (эндпоинты, порт)
+├── go.mod                # Файл Go-модуля
+├── go.sum                # Контрольные суммы зависимостей
 ├── LICENSE
 └── README.md
 ```
