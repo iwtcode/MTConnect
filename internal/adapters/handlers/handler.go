@@ -57,7 +57,11 @@ func (h *Handler) DeleteConnection(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"Message": "Session " + req.SessionID + " disconnected successfully"})
+	// ИЗМЕНЕНИЕ: Добавлен "Status": "ok"
+	c.JSON(http.StatusOK, gin.H{
+		"Status":  "ok",
+		"Message": "Session " + req.SessionID + " disconnected successfully",
+	})
 }
 
 func (h *Handler) CheckConnection(c *gin.Context) {
@@ -82,20 +86,24 @@ func (h *Handler) StartPolling(c *gin.Context) {
 	intervalStr := c.DefaultQuery("interval", "1000") // Интервал по умолчанию 1000мс
 	interval, err := strconv.Atoi(intervalStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "неверный параметр 'interval', ожидается целое число (миллисекунды)"})
+		// ИЗМЕНЕНИЕ: Приведено к единому формату "Status", "Message"
+		c.JSON(http.StatusBadRequest, gin.H{"Status": "error", "Message": "неверный параметр 'interval', ожидается целое число (миллисекунды)"})
 		return
 	}
 	duration := time.Duration(interval) * time.Millisecond
 
 	if err := h.usecase.StartPolling(duration); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
+		// ИЗМЕНЕНИЕ: Приведено к единому формату "Status", "Message"
+		c.JSON(http.StatusInternalServerError, gin.H{"Status": "error", "Message": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "monitoring started"})
+	// ИЗМЕНЕНИЕ: "status" -> "Status"
+	c.JSON(http.StatusOK, gin.H{"Status": "monitoring started"})
 }
 
 func (h *Handler) StopPolling(c *gin.Context) {
 	_ = h.usecase.StopPolling()
-	c.JSON(http.StatusOK, gin.H{"status": "monitoring stopped"})
+	// ИЗМЕНЕНИЕ: "status" -> "Status"
+	c.JSON(http.StatusOK, gin.H{"Status": "monitoring stopped"})
 }
