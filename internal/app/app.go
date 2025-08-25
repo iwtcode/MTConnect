@@ -19,10 +19,9 @@ import (
 // New создает новый экземпляр fx.App
 func New() *fx.App {
 	return fx.New(
-		// Регистрируем все модули приложения
 		ConfigModule,
 		RepositoryModule,
-		ProducerModule, // Новый модуль для Kafka
+		ProducerModule,
 		ServiceModule,
 		UsecaseModule,
 		HttpServerModule,
@@ -32,52 +31,40 @@ func New() *fx.App {
 // --- Модули FX ---
 
 var ConfigModule = fx.Module("config_module",
-	fx.Provide(
-		// Загрузчик конфигурации
-		config.LoadConfiguration,
-	),
+	fx.Provide(config.LoadConfiguration),
 )
 
 var RepositoryModule = fx.Module("repository_module",
 	fx.Provide(
-		// Предоставляем DataStore как реализацию интерфейса Repository
 		func(ds interfaces.DataStoreRepository) interfaces.Repository {
 			return struct{ interfaces.DataStoreRepository }{ds}
 		},
-		// Конструктор для нашего in-memory хранилища
 		datastore.NewDataStore,
 	),
 )
 
 var ProducerModule = fx.Module("producer_module",
-	fx.Provide(
-		// Продюсер для отправки данных (например, в Kafka)
-		producers.NewKafkaProducer,
-	),
+	fx.Provide(producers.NewKafkaProducer),
 )
 
 var ServiceModule = fx.Module("service_module",
 	fx.Provide(
-		// Сервис для опроса MTConnect эндпоинтов
+		// Регистрируем конструкторы сервисов.
+		// Так как они уже возвращают интерфейсы, fx сам всё поймет.
 		services.NewPollingService,
+		services.NewConnectionService,
 	),
 )
 
 var UsecaseModule = fx.Module("usecases_module",
-	fx.Provide(
-		// Конструктор для бизнес-логики (use cases)
-		usecases.NewUsecases,
-	),
+	fx.Provide(usecases.NewUsecases),
 )
 
 var HttpServerModule = fx.Module("http_server_module",
 	fx.Provide(
-		// Обработчики HTTP-запросов
 		handlers.NewHandler,
-		// Роутер
 		handlers.ProvideRouter,
 	),
-	// Запускаем сервер при старте приложения
 	fx.Invoke(InvokeHttpServer, InvokeGracefulShutdown),
 )
 

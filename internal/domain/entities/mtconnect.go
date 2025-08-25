@@ -107,8 +107,17 @@ type Device struct {
 	Name          string         `xml:"name,attr"`
 	UUID          string         `xml:"uuid,attr"`
 	ID            string         `xml:"id,attr"`
+	Description   *Description   `xml:"Description"` // Изменено для парсинга атрибутов и значения
 	DataItems     []DataItem     `xml:"DataItems>DataItem"`
 	ComponentList *ComponentList `xml:"Components"`
+}
+
+// Description содержит метаданные из тега Description в /probe
+type Description struct {
+	Manufacturer string `xml:"manufacturer,attr"`
+	Model        string `xml:"model,attr"`
+	SerialNumber string `xml:"serialNumber,attr"`
+	Value        string `xml:",chardata"`
 }
 
 type ProbeComponent struct {

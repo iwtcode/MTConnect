@@ -1,7 +1,6 @@
 package services
 
 import (
-	"MTConnect/internal/config"
 	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/interfaces"
 	"context"
@@ -14,14 +13,12 @@ import (
 	"time"
 )
 
-// activePoll хранит информацию о запущенном процессе опроса для одного станка
 type activePoll struct {
 	ticker *time.Ticker
 	done   chan bool
 }
 
 type PollingService struct {
-	cfg                  *config.AppConfig
 	repo                 interfaces.DataStoreRepository
 	producer             interfaces.DataProducer
 	activePolls          map[string]*activePoll
@@ -32,114 +29,158 @@ type PollingService struct {
 	metadataMutex        sync.RWMutex
 	axisLinksMutex       sync.RWMutex
 	spindleLinksMutex    sync.RWMutex
+
+	// --- НОВЫЕ ПОЛЯ ДЛЯ ХРАНЕНИЯ СОСТОЯНИЯ ---
+	isPollingActive bool
+	pollingInterval time.Duration
 }
 
-func NewPollingService(cfg *config.AppConfig, repo interfaces.DataStoreRepository, producer interfaces.DataProducer) interfaces.PollingService {
+func NewPollingService(repo interfaces.DataStoreRepository, producer interfaces.DataProducer) interfaces.PollingService {
 	ps := &PollingService{
-		cfg:                  cfg,
 		repo:                 repo,
 		producer:             producer,
 		activePolls:          make(map[string]*activePoll),
 		deviceMetadataStore:  make(map[string]entities.DataItemMetadata),
 		axisDataItemLinks:    make(map[string]entities.AxisDataItemLink),
 		spindleDataItemLinks: make(map[string]entities.SpindleDataItemLink),
+		isPollingActive:      false, // Изначально опрос выключен
 	}
-	ps.loadInitialMetadata() // Загружаем метаданные при создании сервиса
 	return ps
 }
 
-// findEndpointByMachineId ищет URL эндпоинта по ID станка
-func (s *PollingService) findEndpointByMachineId(machineId string) (string, error) {
-	for _, endpoint := range s.cfg.Endpoints {
-		if strings.HasSuffix(strings.ToLower(endpoint), strings.ToLower(machineId)) {
-			return endpoint, nil
-		}
-	}
-	return "", fmt.Errorf("эндпоинт для станка '%s' не найден в конфигурации", machineId)
-}
-
-func (s *PollingService) StartPollingForMachine(machineId string, interval time.Duration) error {
+// StartPollingForNewConnectionIfNeeded проверяет, активен ли опрос, и если да, запускает его для нового подключения.
+func (s *PollingService) StartPollingForNewConnectionIfNeeded(conn *entities.ConnectionInfo) error {
 	s.pollsMutex.Lock()
 	defer s.pollsMutex.Unlock()
 
-	if _, exists := s.activePolls[machineId]; exists {
-		return fmt.Errorf("опрос для станка '%s' уже запущен", machineId)
+	if s.isPollingActive {
+		log.Printf("Глобальный опрос активен. Запускаем polling для новой сессии: %s", conn.SessionID)
+		// Используем уже сохраненный интервал
+		return s.startPollingForMachineUnsafe(conn, s.pollingInterval)
 	}
+	return nil
+}
 
-	endpointURL, err := s.findEndpointByMachineId(machineId)
-	if err != nil {
-		return err
+// startPollingForMachineUnsafe - внутренняя версия без блокировки мьютекса
+func (s *PollingService) startPollingForMachineUnsafe(conn *entities.ConnectionInfo, interval time.Duration) error {
+	if _, exists := s.activePolls[conn.SessionID]; exists {
+		return fmt.Errorf("опрос для сессии '%s' уже запущен", conn.SessionID)
 	}
 
 	ticker := time.NewTicker(interval)
 	done := make(chan bool)
 
-	s.activePolls[machineId] = &activePoll{
+	s.activePolls[conn.SessionID] = &activePoll{
 		ticker: ticker,
 		done:   done,
 	}
 
 	go func() {
-		log.Printf("Запуск опроса для '%s' с интервалом %v", machineId, interval)
-		currentURL := strings.TrimSuffix(endpointURL, "/") + "/current"
+		log.Printf("Запуск опроса для сессии '%s' (станок: %s) с интервалом %v", conn.SessionID, conn.MachineID, interval)
+		currentURL := strings.TrimSuffix(conn.Config.EndpointURL, "/") + "/current"
 		for {
 			select {
 			case <-done:
-				log.Printf("Остановлен опрос для '%s'", machineId)
+				log.Printf("Остановлен опрос для сессии '%s'", conn.SessionID)
 				return
 			case <-ticker.C:
-				s.processSingleEndpoint(currentURL)
+				s.processSingleEndpoint(currentURL, conn.MachineID)
 			}
 		}
 	}()
-
 	return nil
 }
 
-func (s *PollingService) StopPollingForMachine(machineId string) error {
+func (s *PollingService) StartPollingForMachine(conn *entities.ConnectionInfo, interval time.Duration) error {
 	s.pollsMutex.Lock()
 	defer s.pollsMutex.Unlock()
+	return s.startPollingForMachineUnsafe(conn, interval)
+}
 
-	poll, exists := s.activePolls[machineId]
+func (s *PollingService) StopPollingForMachine(sessionID string) error {
+	s.pollsMutex.Lock()
+	defer s.pollsMutex.Unlock()
+	poll, exists := s.activePolls[sessionID]
 	if !exists {
-		return fmt.Errorf("опрос для станка '%s' не был запущен", machineId)
+		return nil
 	}
-
 	poll.ticker.Stop()
 	poll.done <- true
 	close(poll.done)
-	delete(s.activePolls, machineId)
+	delete(s.activePolls, sessionID)
+	return nil
+}
 
+func (s *PollingService) StartAllPolling(connections []*entities.ConnectionInfo, interval time.Duration) error {
+	s.pollsMutex.Lock()
+	defer s.pollsMutex.Unlock()
+
+	log.Println("Запуск опроса для всех активных подключений...")
+	// Сохраняем состояние
+	s.isPollingActive = true
+	s.pollingInterval = interval
+
+	var errs []string
+	for _, conn := range connections {
+		if conn.IsHealthy {
+			if err := s.startPollingForMachineUnsafe(conn, interval); err != nil {
+				errs = append(errs, err.Error())
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("возникли ошибки при запуске опроса: %s", strings.Join(errs, "; "))
+	}
 	return nil
 }
 
 func (s *PollingService) StopAllPolling() {
 	s.pollsMutex.Lock()
 	defer s.pollsMutex.Unlock()
+
 	log.Println("Остановка всех процессов опроса...")
-	for machineId, poll := range s.activePolls {
+	// Сбрасываем состояние
+	s.isPollingActive = false
+
+	for sessionID, poll := range s.activePolls {
 		poll.ticker.Stop()
 		poll.done <- true
 		close(poll.done)
-		delete(s.activePolls, machineId)
+		delete(s.activePolls, sessionID)
 	}
 	log.Println("Все процессы опроса остановлены.")
 }
 
-func (s *PollingService) CheckConnection(machineId string) error {
-	endpointURL, err := s.findEndpointByMachineId(machineId)
-	if err != nil {
-		return err
-	}
+// ... Остальные функции (CheckMachineConnection, LoadMetadataForEndpoint, processSingleEndpoint, и т.д.) остаются без изменений ...
+// (Код остальных функций для краткости опущен, так как он не менялся)
+func (s *PollingService) CheckMachineConnection(endpointURL string) error {
 	probeURL := strings.TrimSuffix(endpointURL, "/") + "/probe"
-	_, err = FetchXML(probeURL)
+	_, err := FetchXML(probeURL)
 	if err != nil {
-		return fmt.Errorf("проверка соединения со станком '%s' провалена: %w", machineId, err)
+		return fmt.Errorf("проверка соединения с эндпоинтом '%s' провалена: %w", endpointURL, err)
 	}
 	return nil
 }
 
-func (s *PollingService) processSingleEndpoint(endpointURL string) {
+func (s *PollingService) LoadMetadataForEndpoint(endpointURL string) error {
+	if err := s.fetchAndParseProbe(endpointURL); err != nil {
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: %v. Некоторые данные могут быть не распознаны.", err)
+		return err
+	}
+	s.metadataMutex.RLock()
+	defer s.metadataMutex.RUnlock()
+	s.axisLinksMutex.RLock()
+	defer s.axisLinksMutex.RUnlock()
+	s.spindleLinksMutex.RLock()
+	defer s.spindleLinksMutex.RUnlock()
+
+	log.Printf("Загружено %d уникальных DataItem'ов.", len(s.deviceMetadataStore))
+	log.Printf("Загружено %d ссылок на DataItem'ы осей.", len(s.axisDataItemLinks))
+	log.Printf("Загружено %d ссылок на DataItem'ы шпинделей.", len(s.spindleDataItemLinks))
+	return nil
+}
+
+func (s *PollingService) processSingleEndpoint(endpointURL string, targetMachineID string) {
 	xmlData, err := FetchXML(endpointURL)
 	if err != nil {
 		log.Printf("ОШИБКА при получении XML с %s: %v\n", endpointURL, err)
@@ -161,11 +202,9 @@ func (s *PollingService) processSingleEndpoint(endpointURL string) {
 	s.metadataMutex.RUnlock()
 
 	for _, machineData := range machineDataSlice {
-		if machineData.MachineId != "" {
-			// 1. Сохраняем в локальное хранилище
+		if machineData.MachineId == targetMachineID {
 			s.repo.Set(machineData.MachineId, machineData)
 
-			// 2. Отправляем в Kafka
 			jsonData, err := json.Marshal(machineData)
 			if err != nil {
 				log.Printf("ОШИБКА: не удалось сериализовать MachineData для Kafka: %v", err)
@@ -175,26 +214,9 @@ func (s *PollingService) processSingleEndpoint(endpointURL string) {
 			if err != nil {
 				log.Printf("ОШИБКА: не удалось отправить данные в Kafka для станка %s: %v", machineData.MachineId, err)
 			}
+			break
 		}
 	}
-}
-
-// ... (остальные функции loadInitialMetadata, fetchAndParseProbe, extractComponentMetadata остаются без изменений) ...
-func (s *PollingService) loadInitialMetadata() {
-	for _, endpoint := range s.cfg.Endpoints {
-		if err := s.fetchAndParseProbe(endpoint); err != nil {
-			log.Printf("ПРЕДУПРЕЖДЕНИЕ: %v. Некоторые данные могут быть не распознаны.", err)
-		}
-	}
-	s.metadataMutex.RLock()
-	s.axisLinksMutex.RLock()
-	s.spindleLinksMutex.RLock()
-	log.Printf("Загружено %d уникальных DataItem'ов.", len(s.deviceMetadataStore))
-	log.Printf("Загружено %d ссылок на DataItem'ы осей.", len(s.axisDataItemLinks))
-	log.Printf("Загружено %d ссылок на DataItem'ы шпинделей.", len(s.spindleDataItemLinks))
-	s.spindleLinksMutex.RUnlock()
-	s.axisLinksMutex.RUnlock()
-	s.metadataMutex.RUnlock()
 }
 
 func (s *PollingService) fetchAndParseProbe(endpointURL string) error {

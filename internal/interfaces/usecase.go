@@ -7,13 +7,15 @@ import (
 
 // Usecases - это агрегирующий интерфейс для всех use cases
 type Usecases interface {
-	MachineUsecase
+	ConnectionUsecase
 }
 
-// MachineUsecase определяет контракт для бизнес-логики, связанной со станками
-type MachineUsecase interface {
-	GetMachineData(machineId string) (entities.MachineData, error)
-	StartPolling(machineId string, interval time.Duration) error
-	StopPolling(machineId string) error
-	CheckMachineConnection(machineId string) error
+// ConnectionUsecase определяет контракт для логики управления подключениями
+type ConnectionUsecase interface {
+	CreateConnection(req entities.ConnectionRequest) (*entities.ConnectionInfo, error)
+	GetAllConnections() []*entities.ConnectionInfo
+	DeleteConnection(sessionID string) error
+	CheckConnection(sessionID string) (*entities.ConnectionInfo, error)
+	StartPolling(interval time.Duration) error
+	StopPolling() error
 }

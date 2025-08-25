@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/interfaces"
 	"net/http"
 	"strconv"
@@ -10,69 +11,91 @@ import (
 )
 
 type Handler struct {
-	usecase interfaces.MachineUsecase
+	usecase interfaces.Usecases
 }
 
 func NewHandler(usecase interfaces.Usecases) *Handler {
 	return &Handler{usecase: usecase}
 }
 
-// GetCurrentData обрабатывает запрос на получение текущих данных станка
-func (h *Handler) GetCurrentData(c *gin.Context) {
-	machineId := c.Param("machineId")
-	machineData, err := h.usecase.GetMachineData(machineId)
+// --- V1 API Управления Подключениями ---
+
+func (h *Handler) CreateConnection(c *gin.Context) {
+	var req entities.ConnectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Status": "error", "Message": err.Error()})
+		return
+	}
+
+	connInfo, err := h.usecase.CreateConnection(req)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"Status": "error", "Message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, machineData)
+
+	c.JSON(http.StatusOK, gin.H{"Status": "ok", "connectionInfo": connInfo})
 }
 
-// CheckConnection обрабатывает запрос на проверку доступности станка
+func (h *Handler) GetConnections(c *gin.Context) {
+	connections := h.usecase.GetAllConnections()
+	c.JSON(http.StatusOK, gin.H{
+		"Status":      "ok",
+		"PoolSize":    len(connections),
+		"Connections": connections,
+	})
+}
+
+func (h *Handler) DeleteConnection(c *gin.Context) {
+	var req entities.SessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Status": "error", "Message": err.Error()})
+		return
+	}
+
+	if err := h.usecase.DeleteConnection(req.SessionID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"Status": "error", "Message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"Message": "Session " + req.SessionID + " disconnected successfully"})
+}
+
 func (h *Handler) CheckConnection(c *gin.Context) {
-	machineId := c.Param("machineId")
-	if err := h.usecase.CheckMachineConnection(machineId); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable", "error": err.Error()})
+	var req entities.SessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Status": "error", "Message": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "станок " + machineId + " доступен"})
+
+	connInfo, err := h.usecase.CheckConnection(req.SessionID)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"Status": "unhealthy", "Message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"Status": "healthy", "connectionInfo": connInfo})
 }
 
-// StartPolling обрабатывает запрос на запуск опроса
+// --- V1 API Управления Опросом ---
+
 func (h *Handler) StartPolling(c *gin.Context) {
-	machineId := c.Param("machineId")
-	intervalStr := c.DefaultQuery("interval", "1000") // Интервал в миллисекундах
+	intervalStr := c.DefaultQuery("interval", "1000") // Интервал по умолчанию 1000мс
 	interval, err := strconv.Atoi(intervalStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "неверный параметр 'interval', ожидается целое число (миллисекунды)"})
 		return
 	}
-
 	duration := time.Duration(interval) * time.Millisecond
-	if err := h.usecase.StartPolling(machineId, duration); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+
+	if err := h.usecase.StartPolling(duration); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "опрос для станка " + machineId + " запущен"})
+	c.JSON(http.StatusOK, gin.H{"status": "monitoring started"})
 }
 
-// StopPolling обрабатывает запрос на остановку опроса
 func (h *Handler) StopPolling(c *gin.Context) {
-	machineId := c.Param("machineId")
-	if err := h.usecase.StopPolling(machineId); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "опрос для станка " + machineId + " остановлен"})
-}
-
-// GetControlProgram (заглушка)
-func (h *Handler) GetControlProgram(c *gin.Context) {
-	machineId := c.Param("machineId")
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"machineId": machineId,
-		"message":   "функционал получения управляющей программы пока не реализован",
-		"program":   "G0 X0 Y0...",
-	})
+	_ = h.usecase.StopPolling()
+	c.JSON(http.StatusOK, gin.H{"status": "monitoring stopped"})
 }

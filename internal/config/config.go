@@ -10,7 +10,6 @@ type AppConfig struct {
 	ServerPort   string   `json:"server_port"`
 	KafkaBrokers []string `json:"kafka_brokers"`
 	KafkaTopic   string   `json:"kafka_topic"`
-	Endpoints    []string `json:"endpoints"`
 }
 
 // LoadConfiguration загружает конфигурацию из файла
