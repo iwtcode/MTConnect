@@ -11,32 +11,40 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type ConnectionService struct {
 	mu         sync.RWMutex
 	pool       map[string]*entities.ConnectionInfo
 	pollingSvc interfaces.PollingService
+	dbRepo     interfaces.CncMachineRepository // Добавлено
 }
 
-func NewConnectionService(pollingSvc interfaces.PollingService) interfaces.ConnectionService {
+func NewConnectionService(pollingSvc interfaces.PollingService, dbRepo interfaces.CncMachineRepository) interfaces.ConnectionService { // Добавлен dbRepo
 	return &ConnectionService{
 		pool:       make(map[string]*entities.ConnectionInfo),
 		pollingSvc: pollingSvc,
+		dbRepo:     dbRepo, // Добавлено
 	}
 }
 
 // CreateConnection проверяет новый запрос на подключение и добавляет его в пул.
+// Функция стала идемпотентной: если станок уже есть в БД, она использует существующий
+// SessionID и обновляет его статус. Если нет - создает новую запись.
 func (s *ConnectionService) CreateConnection(req entities.ConnectionRequest) (*entities.ConnectionInfo, error) {
+	// 1. Проверка на дубликаты в текущем пуле активных подключений (в памяти)
 	s.mu.RLock()
 	for _, conn := range s.pool {
 		if conn.Config.EndpointURL == req.EndpointURL && conn.Config.Model == req.Model {
 			s.mu.RUnlock()
-			return nil, fmt.Errorf("подключение для модели '%s' на эндпоинте '%s' уже существует с SessionID: %s", req.Model, req.EndpointURL, conn.SessionID)
+			log.Printf("Запрос на подключение к уже активной сессии '%s'. Возвращаем существующие данные.", conn.SessionID)
+			return conn, nil // Возвращаем существующее активное подключение
 		}
 	}
 	s.mu.RUnlock()
 
+	// 2. Получение и парсинг /probe для валидации эндпоинта и модели
 	probeURL := strings.TrimSuffix(req.EndpointURL, "/") + "/probe"
 
 	xmlData, err := FetchXML(probeURL)
@@ -78,6 +86,7 @@ func (s *ConnectionService) CreateConnection(req entities.ConnectionRequest) (*e
 		return nil, fmt.Errorf("производитель '%s' не совпадает с указанным в /probe для найденной модели: '%s'", req.Manufacturer, targetDevice.Description.Manufacturer)
 	}
 
+	// Загружаем метаданные до блокировки, чтобы не задерживать другие операции
 	if err := s.pollingSvc.LoadMetadataForEndpoint(req.EndpointURL); err != nil {
 		return nil, fmt.Errorf("ошибка при загрузке метаданных для %s: %w", req.EndpointURL, err)
 	}
@@ -85,7 +94,44 @@ func (s *ConnectionService) CreateConnection(req entities.ConnectionRequest) (*e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sessionID := uuid.New().String()
+	// 3. Проверяем, существует ли станок в базе данных
+	existingMachine, err := s.dbRepo.GetByEndpointAndModel(req.EndpointURL, req.Model)
+
+	var sessionID string
+	if err != nil && err != gorm.ErrRecordNotFound {
+		// Ошибка при обращении к БД, не связанная с отсутствием записи
+		return nil, fmt.Errorf("ошибка при проверке станка в БД: %w", err)
+	}
+
+	if existingMachine != nil {
+		// 4. СТАНОК УЖЕ СУЩЕСТВУЕТ В БД - используем его данные
+		sessionID = existingMachine.SessionID
+		log.Printf("Станок '%s' (%s) уже существует в БД. Используем SessionID: %s", req.Model, req.EndpointURL, sessionID)
+
+		// Обновляем статус на 'connected', если он был другим
+		if existingMachine.Status != entities.StatusConnected {
+			if err := s.dbRepo.UpdateStatus(sessionID, entities.StatusConnected); err != nil {
+				log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось обновить статус для сессии %s в БД: %v", sessionID, err)
+			}
+		}
+	} else {
+		// 5. СТАНОК НОВЫЙ - создаем запись в БД
+		sessionID = uuid.New().String()
+		log.Printf("Создается новое подключение для станка '%s' (%s). Новый SessionID: %s", req.Model, req.EndpointURL, sessionID)
+
+		machineToSave := &entities.CncMachine{
+			SessionID:    sessionID,
+			EndpointURL:  req.EndpointURL,
+			Model:        req.Model,
+			Manufacturer: targetDevice.Description.Manufacturer,
+			Status:       entities.StatusConnected,
+		}
+		if err := s.dbRepo.Create(machineToSave); err != nil {
+			return nil, fmt.Errorf("не удалось сохранить новое подключение %s в БД: %w", sessionID, err)
+		}
+	}
+
+	// 6. Создаем или обновляем информацию о подключении в памяти
 	connInfo := &entities.ConnectionInfo{
 		SessionID: sessionID,
 		MachineID: targetDevice.Name,
@@ -102,19 +148,15 @@ func (s *ConnectionService) CreateConnection(req entities.ConnectionRequest) (*e
 
 	s.pool[sessionID] = connInfo
 
-	// --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-	// После успешного добавления подключения в пул,
-	// пытаемся запустить для него опрос, если глобальный опрос активен.
+	// 7. Запускаем опрос, если он уже активен глобально
 	if err := s.pollingSvc.StartPollingForNewConnectionIfNeeded(connInfo); err != nil {
-		// Эта ошибка не должна откатывать создание подключения,
-		// но ее стоит залогировать.
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось автоматически запустить опрос для новой сессии %s: %v", connInfo.SessionID, err)
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось автоматически запустить опрос для сессии %s: %v", connInfo.SessionID, err)
 	}
 
 	return connInfo, nil
 }
 
-// ... Остальные функции (GetConnection, GetAllConnections, DeleteConnection, CheckConnection) остаются без изменений ...
+// ... (GetConnection и GetAllConnections без изменений) ...
 func (s *ConnectionService) GetConnection(sessionID string) (*entities.ConnectionInfo, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -136,7 +178,15 @@ func (s *ConnectionService) DeleteConnection(sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.pool[sessionID]; !exists {
-		return fmt.Errorf("сессия '%s' не найдена", sessionID)
+		// Если сессии нет в памяти, все равно пытаемся обновить статус в БД
+		if err := s.dbRepo.UpdateStatus(sessionID, entities.StatusDisconnected); err != nil && err != gorm.ErrRecordNotFound {
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось обновить статус сессии %s в БД: %v", sessionID, err)
+		}
+		return fmt.Errorf("сессия '%s' не найдена в активном пуле", sessionID)
+	}
+
+	if err := s.dbRepo.UpdateStatus(sessionID, entities.StatusDisconnected); err != nil {
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось обновить статус сессии %s в БД: %v", sessionID, err)
 	}
 
 	_ = s.pollingSvc.StopPollingForMachine(sessionID)
@@ -145,6 +195,7 @@ func (s *ConnectionService) DeleteConnection(sessionID string) error {
 	return nil
 }
 
+// ... (CheckConnection без изменений) ...
 func (s *ConnectionService) CheckConnection(sessionID string) (*entities.ConnectionInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

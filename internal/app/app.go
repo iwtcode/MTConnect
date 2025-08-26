@@ -4,7 +4,9 @@ import (
 	"MTConnect/internal/adapters/handlers"
 	"MTConnect/internal/adapters/producers"
 	"MTConnect/internal/adapters/repositories/datastore"
+	"MTConnect/internal/adapters/repositories/postgres" // Изменено
 	"MTConnect/internal/config"
+	"MTConnect/internal/domain/entities" // Добавлено
 	"MTConnect/internal/interfaces"
 	"MTConnect/internal/services"
 	"MTConnect/internal/usecases"
@@ -25,6 +27,8 @@ func New() *fx.App {
 		ServiceModule,
 		UsecaseModule,
 		HttpServerModule,
+		// Добавляем вызов новой функции
+		fx.Invoke(InvokeRestoreConnections),
 	)
 }
 
@@ -34,13 +38,21 @@ var ConfigModule = fx.Module("config_module",
 	fx.Provide(config.LoadConfiguration),
 )
 
+// --- ИЗМЕНЕНИЕ: RepositoryModule теперь работает с PostgreSQL ---
 var RepositoryModule = fx.Module("repository_module",
 	fx.Provide(
-		func(ds interfaces.DataStoreRepository) interfaces.Repository {
-			return struct{ interfaces.DataStoreRepository }{ds}
-		},
+		// Провайдер для in-memory хранилища данных (остается)
 		datastore.NewDataStore,
+		// Провайдер для репозитория БД
+		postgres.NewRepository,
 	),
+	// Приводим конкретные реализации к общему интерфейсу Repository
+	fx.Provide(func(ds interfaces.DataStoreRepository, cncRepo interfaces.CncMachineRepository) interfaces.Repository {
+		return struct {
+			interfaces.DataStoreRepository
+			interfaces.CncMachineRepository
+		}{ds, cncRepo}
+	}),
 )
 
 var ProducerModule = fx.Module("producer_module",
@@ -49,10 +61,11 @@ var ProducerModule = fx.Module("producer_module",
 
 var ServiceModule = fx.Module("service_module",
 	fx.Provide(
-		// Регистрируем конструкторы сервисов.
-		// Так как они уже возвращают интерфейсы, fx сам всё поймет.
 		services.NewPollingService,
-		services.NewConnectionService,
+		// Передаем новый репозиторий в сервис
+		func(pollSvc interfaces.PollingService, dbRepo interfaces.CncMachineRepository) interfaces.ConnectionService {
+			return services.NewConnectionService(pollSvc, dbRepo)
+		},
 	),
 )
 
@@ -68,8 +81,47 @@ var HttpServerModule = fx.Module("http_server_module",
 	fx.Invoke(InvokeHttpServer, InvokeGracefulShutdown),
 )
 
+// --- НОВАЯ ФУНКЦИЯ: Восстановление подключений при старте ---
+func InvokeRestoreConnections(lc fx.Lifecycle, connSvc interfaces.ConnectionService, dbRepo interfaces.CncMachineRepository) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			log.Println("Восстановление активных подключений из базы данных...")
+			machines, err := dbRepo.GetAllByStatus(entities.StatusConnected)
+			if err != nil {
+				log.Printf("ОШИБКА: не удалось получить список активных станков из БД: %v", err)
+				return nil // Не блокируем запуск приложения из-за этой ошибки
+			}
+
+			if len(machines) == 0 {
+				log.Println("Не найдено активных подключений для восстановления.")
+				return nil
+			}
+
+			for _, machine := range machines {
+				log.Printf("Попытка восстановить подключение для модели '%s' на '%s'", machine.Model, machine.EndpointURL)
+				req := entities.ConnectionRequest{
+					EndpointURL:  machine.EndpointURL,
+					Model:        machine.Model,
+					Manufacturer: machine.Manufacturer,
+				}
+				if _, err := connSvc.CreateConnection(req); err != nil {
+					log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось восстановить подключение для сессии %s: %v", machine.SessionID, err)
+					// Обновляем статус в БД, чтобы не пытаться восстановить в следующий раз
+					if err := dbRepo.UpdateStatus(machine.SessionID, entities.StatusDisconnected); err != nil {
+						log.Printf("ОШИБКА: не удалось обновить статус для сессии %s в БД: %v", machine.SessionID, err)
+					}
+				} else {
+					log.Printf("Подключение для модели '%s' успешно восстановлено.", machine.Model)
+				}
+			}
+			return nil
+		},
+	})
+}
+
 // InvokeHttpServer запускает HTTP-сервер
 func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler) {
+	// ... (код функции остается без изменений)
 	serverAddr := ":" + cfg.ServerPort
 	server := &http.Server{
 		Addr:         serverAddr,
@@ -97,6 +149,7 @@ func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler) {
 
 // InvokeGracefulShutdown обеспечивает корректное завершение работы сервисов
 func InvokeGracefulShutdown(lc fx.Lifecycle, poller interfaces.PollingService, producer interfaces.DataProducer) {
+	// ... (код функции остается без изменений)
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			log.Println("Корректное завершение работы сервисов...")
