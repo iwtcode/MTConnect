@@ -14,8 +14,9 @@ type KafkaProducer struct {
 
 // NewKafkaProducer создает новый экземпляр продюсера Kafka
 func NewKafkaProducer(cfg *config.AppConfig) (interfaces.DataProducer, error) {
+	// ИЗМЕНЕНИЕ: kafka.TCP теперь принимает cfg.KafkaBroker вместо cfg.KafkaBrokers...
 	writer := &kafka.Writer{
-		Addr:     kafka.TCP(cfg.KafkaBrokers...),
+		Addr:     kafka.TCP(cfg.KafkaBroker),
 		Topic:    cfg.KafkaTopic,
 		Balancer: &kafka.LeastBytes{},
 	}

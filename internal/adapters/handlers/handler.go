@@ -57,7 +57,6 @@ func (h *Handler) DeleteConnection(c *gin.Context) {
 		return
 	}
 
-	// ИЗМЕНЕНИЕ: Добавлен "Status": "ok"
 	c.JSON(http.StatusOK, gin.H{
 		"Status":  "ok",
 		"Message": "Session " + req.SessionID + " disconnected successfully",

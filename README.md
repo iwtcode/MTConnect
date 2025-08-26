@@ -49,27 +49,24 @@ cd MTConnect
 
 2️⃣ **Конфигурация приложения**
 
-Откройте файл config.json и при необходимости измените его
+Откройте файл .env и при необходимости измените его
 
-```json
-{
-  "server_port": "8080",
-  "kafka_brokers": ["localhost:9092"],
-  "kafka_topic": "mtconnect_data",
-  "endpoints": [
-    "http://localhost:5001/Mazak",
-    "http://localhost:5001/OKUMA",
-    "https://smstestbed.nist.gov/vds"
-  ]
-}
+```dotenv
+# App
+APP_PORT=8080
+GIN_MODE=debug
+
+# Kafka
+KAFKA_BROKER=localhost:9092
+KAFKA_TOPIC=opc-data
 ```
 
 | Параметр | Описание | Пример |
 |---|---|---|
-| `server_port` | Порт для HTTP сервера | `"8080"` |
-| `kafka_brokers` | Список брокеров Kafka для подключения | `["localhost:9092"]` |	
-| `kafka_topic` | Имя топика для отправки данных | `"mtconnect_data"` |
-| `endpoints` | Список MTConnect эндпоинтов | `[`<br>&nbsp;&nbsp;&nbsp;&nbsp;`"http://machine1",`<br>&nbsp;&nbsp;&nbsp;&nbsp;`"http://machine2"`<br>`]` |
+| `APP_PORT` | Порт, на котором будет запущен HTTP-сервер	 | `8080` |
+| `GIN_MODE` | Режим работы Gin (debug или release) | `debug` |	
+| `KAFKA_BROKER` | Адрес брокера Kafka для подключения | `localhost:9092` |
+| `KAFKA_TOPIC` | Имя топика Kafka для отправки данных | `mtconnect_data` |
 
 3️⃣ **Запуск Apache Kafka**
 

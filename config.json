@@ -1,5 +1,0 @@
-{
-  "server_port": "8080",
-  "kafka_brokers": ["localhost:9092"],
-  "kafka_topic": "mtconnect_data"
-}

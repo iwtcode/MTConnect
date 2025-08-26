@@ -1,29 +1,40 @@
 package config
 
 import (
-	"encoding/json"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 // AppConfig содержит конфигурацию приложения
 type AppConfig struct {
-	ServerPort   string   `json:"server_port"`
-	KafkaBrokers []string `json:"kafka_brokers"`
-	KafkaTopic   string   `json:"kafka_topic"`
+	ServerPort  string
+	KafkaBroker string // Изменено с KafkaBrokers []string
+	KafkaTopic  string
+	GinMode     string
 }
 
-// LoadConfiguration загружает конфигурацию из файла
+// LoadConfiguration загружает конфигурацию из .env файла или переменных окружения
 func LoadConfiguration() (*AppConfig, error) {
-	var config AppConfig
+	// Загружаем .env файл. В случае ошибки (например, файл не найден),
+	// мы все равно продолжаем, так как переменные могут быть установлены в окружении системы.
+	_ = godotenv.Load()
 
-	configFile, err := os.ReadFile("config.json")
-	if err != nil {
-		return nil, err
+	// KafkaBrokers теперь одна строка, разделенная запятыми
+	config := &AppConfig{
+		ServerPort:  getEnv("APP_PORT", "8080"),
+		KafkaBroker: getEnv("KAFKA_BROKER", "localhost:9092"),
+		KafkaTopic:  getEnv("KAFKA_TOPIC", "opc-data"),
+		GinMode:     getEnv("GIN_MODE", "debug"),
 	}
 
-	err = json.Unmarshal(configFile, &config)
-	if err != nil {
-		return nil, err
+	return config, nil
+}
+
+// getEnv - вспомогательная функция для получения переменной окружения с fallback-значением
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
 	}
-	return &config, nil
+	return fallback
 }

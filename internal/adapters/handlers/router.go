@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"MTConnect/internal/config"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 // ProvideRouter настраивает и возвращает HTTP-роутер
-func ProvideRouter(h *Handler) http.Handler {
+func ProvideRouter(h *Handler, cfg *config.AppConfig) http.Handler {
+	gin.SetMode(cfg.GinMode)
+
 	router := gin.Default()
 
 	// Новая группа API v1
