@@ -1,8 +1,10 @@
 package usecases
 
 import (
+	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/domain/models"
 	"MTConnect/internal/interfaces"
+	"fmt"
 	"time"
 )
 
@@ -20,6 +22,10 @@ func (u *Usecase) CreateConnection(req models.ConnectionRequest) (*models.Connec
 	return u.mtconnectSvc.CreateConnection(req)
 }
 
+func (u *Usecase) RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error) {
+	return u.mtconnectSvc.RestoreConnection(machine)
+}
+
 func (u *Usecase) GetAllConnections() []*models.ConnectionInfo {
 	return u.mtconnectSvc.GetAllConnections()
 }
@@ -32,10 +38,14 @@ func (u *Usecase) CheckConnection(sessionID string) (*models.ConnectionInfo, err
 	return u.mtconnectSvc.CheckConnection(sessionID)
 }
 
-func (u *Usecase) StartPolling(interval time.Duration) error {
-	return u.mtconnectSvc.StartPolling(interval)
+func (u *Usecase) StartPolling(sessionID string, interval time.Duration) error {
+	conn, found := u.mtconnectSvc.GetConnection(sessionID)
+	if !found {
+		return fmt.Errorf("не удалось запустить опрос: сессия '%s' не найдена в активном пуле", sessionID)
+	}
+	return u.mtconnectSvc.StartPolling(conn, interval)
 }
 
-func (u *Usecase) StopPolling() error {
-	return u.mtconnectSvc.StopPolling()
+func (u *Usecase) StopPolling(sessionID string) error {
+	return u.mtconnectSvc.StopPolling(sessionID)
 }

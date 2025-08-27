@@ -14,6 +14,12 @@ type SessionRequest struct {
 	SessionID string `json:"SessionID" binding:"required"`
 }
 
+// PollingRequest определяет структуру для запроса на запуск опроса.
+type PollingRequest struct {
+	SessionID string `json:"SessionID" binding:"required"`
+	Interval  int    `json:"Interval" binding:"required,gt=0"` // в миллисекундах
+}
+
 // ConnectionConfig содержит проверенную конфигурацию подключения.
 type ConnectionConfig struct {
 	EndpointURL  string `json:"EndpointURL"`

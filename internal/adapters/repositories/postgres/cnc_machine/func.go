@@ -30,6 +30,22 @@ func (r *CncMachineRepositoryImpl) UpdateStatus(sessionID, status string) error 
 	return nil
 }
 
+// UpdatePollingState обновляет статус и интервал опроса
+func (r *CncMachineRepositoryImpl) UpdatePollingState(sessionID, status string, interval int) error {
+	updates := map[string]interface{}{
+		"status":   status,
+		"interval": interval,
+	}
+	result := r.db.Model(&entities.CncMachine{}).Where("session_id = ?", sessionID).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (r *CncMachineRepositoryImpl) Delete(sessionID string) error {
 	result := r.db.Delete(&entities.CncMachine{}, "session_id = ?", sessionID)
 	if result.Error != nil {
@@ -53,6 +69,15 @@ func (r *CncMachineRepositoryImpl) GetBySessionID(sessionID string) (*entities.C
 func (r *CncMachineRepositoryImpl) GetAllByStatus(status string) ([]entities.CncMachine, error) {
 	var machines []entities.CncMachine
 	if err := r.db.Where("status = ?", status).Find(&machines).Error; err != nil {
+		return nil, err
+	}
+	return machines, nil
+}
+
+// GetAll возвращает все сохраненные станки
+func (r *CncMachineRepositoryImpl) GetAll() ([]entities.CncMachine, error) {
+	var machines []entities.CncMachine
+	if err := r.db.Find(&machines).Error; err != nil {
 		return nil, err
 	}
 	return machines, nil

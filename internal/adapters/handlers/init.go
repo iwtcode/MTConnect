@@ -34,8 +34,8 @@ func ProvideRouter(h *Handler, cfg *config.AppConfig) http.Handler {
 		v1.POST("/connect/check", h.CheckConnection)
 
 		// Управление опросом
-		v1.GET("/polling/start", h.StartPolling)
-		v1.GET("/polling/stop", h.StopPolling)
+		v1.POST("/polling/start", h.StartPolling) // Изменено на POST
+		v1.POST("/polling/stop", h.StopPolling)   // Изменено на POST
 	}
 
 	return router

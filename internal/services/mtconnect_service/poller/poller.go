@@ -1,6 +1,7 @@
 package poller
 
 import (
+	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/domain/models"
 	"MTConnect/internal/interfaces"
 	"MTConnect/internal/services/mtconnect_service/client"
@@ -22,6 +23,7 @@ type activePoll struct {
 
 type PollingManager struct {
 	repo                 interfaces.DataStoreRepository
+	dbRepo               interfaces.CncMachineRepository
 	producer             interfaces.KafkaService
 	activePolls          map[string]*activePoll
 	pollsMutex           sync.Mutex
@@ -31,65 +33,67 @@ type PollingManager struct {
 	metadataMutex        sync.RWMutex
 	axisLinksMutex       sync.RWMutex
 	spindleLinksMutex    sync.RWMutex
-	isPollingActive      bool
-	pollingInterval      time.Duration
 }
 
-func NewPollingManager(repo interfaces.DataStoreRepository, producer interfaces.KafkaService) *PollingManager {
+func NewPollingManager(repo interfaces.Repository, producer interfaces.KafkaService) *PollingManager {
 	return &PollingManager{
 		repo:                 repo,
+		dbRepo:               repo,
 		producer:             producer,
 		activePolls:          make(map[string]*activePoll),
 		deviceMetadataStore:  make(map[string]models.DataItemMetadata),
 		axisDataItemLinks:    make(map[string]models.AxisDataItemLink),
 		spindleDataItemLinks: make(map[string]models.SpindleDataItemLink),
-		isPollingActive:      false,
 	}
 }
 
-func (s *PollingManager) IsPollingActive() bool {
+func (s *PollingManager) IsPollingActive(sessionID string) bool {
 	s.pollsMutex.Lock()
 	defer s.pollsMutex.Unlock()
-	return s.isPollingActive
+	_, exists := s.activePolls[sessionID]
+	return exists
 }
 
-func (s *PollingManager) StartPollingForNewConnectionIfNeeded(conn *models.ConnectionInfo) error {
+// ИСПРАВЛЕНИЕ 2: Метод теперь принимает ConnectionInfo
+func (s *PollingManager) StartPolling(conn *models.ConnectionInfo, interval time.Duration) error {
 	s.pollsMutex.Lock()
 	defer s.pollsMutex.Unlock()
 
-	if s.isPollingActive {
-		log.Printf("Глобальный опрос активен. Запускаем polling для новой сессии: %s", conn.SessionID)
-		return s.startPollingForMachineUnsafe(conn, s.pollingInterval)
+	sessionID := conn.SessionID
+
+	if _, exists := s.activePolls[sessionID]; exists {
+		return fmt.Errorf("опрос для сессии '%s' уже запущен", sessionID)
 	}
+
+	if err := s.dbRepo.UpdatePollingState(sessionID, entities.StatusPolled, int(interval.Milliseconds())); err != nil {
+		return fmt.Errorf("не удалось обновить статус станка в БД: %w", err)
+	}
+
+	// Передаем MachineID в хелпер
+	s.startPollingForMachineUnsafe(sessionID, conn.Config.EndpointURL, conn.MachineID, interval)
+
 	return nil
 }
 
-func (s *PollingManager) startPollingForMachineUnsafe(conn *models.ConnectionInfo, interval time.Duration) error {
-	if _, exists := s.activePolls[conn.SessionID]; exists {
-		return fmt.Errorf("опрос для сессии '%s' уже запущен", conn.SessionID)
+func (s *PollingManager) StopPolling(sessionID string) error {
+	s.pollsMutex.Lock()
+	defer s.pollsMutex.Unlock()
+
+	if err := s.dbRepo.UpdatePollingState(sessionID, entities.StatusConnected, 0); err != nil {
+		log.Printf("Не удалось обновить статус для сессии %s в БД при остановке опроса: %v", sessionID, err)
 	}
 
-	ticker := time.NewTicker(interval)
-	done := make(chan bool)
-
-	s.activePolls[conn.SessionID] = &activePoll{
-		ticker: ticker,
-		done:   done,
+	poll, exists := s.activePolls[sessionID]
+	if !exists {
+		log.Printf("Попытка остановить опрос для сессии '%s', который не был активен.", sessionID)
+		return nil
 	}
 
-	go func() {
-		log.Printf("Запуск опроса для сессии '%s' (станок: %s) с интервалом %v", conn.SessionID, conn.MachineID, interval)
-		currentURL := strings.TrimSuffix(conn.Config.EndpointURL, "/") + "/current"
-		for {
-			select {
-			case <-done:
-				log.Printf("Остановлен опрос для сессии '%s'", conn.SessionID)
-				return
-			case <-ticker.C:
-				s.processSingleEndpoint(currentURL, conn.MachineID)
-			}
-		}
-	}()
+	poll.ticker.Stop()
+	poll.done <- true
+	close(poll.done)
+	delete(s.activePolls, sessionID)
+
 	return nil
 }
 
@@ -105,52 +109,6 @@ func (s *PollingManager) StopPollingForMachine(sessionID string) error {
 	close(poll.done)
 	delete(s.activePolls, sessionID)
 	return nil
-}
-
-func (s *PollingManager) StartAllPolling(connections []*models.ConnectionInfo, interval time.Duration) error {
-	s.pollsMutex.Lock()
-	defer s.pollsMutex.Unlock()
-
-	if s.isPollingActive {
-		return fmt.Errorf("опрос уже запущен")
-	}
-
-	log.Println("Запуск опроса для всех активных подключений...")
-	s.isPollingActive = true
-	s.pollingInterval = interval
-
-	var errs []string
-	for _, conn := range connections {
-		if conn.IsHealthy {
-			if err := s.startPollingForMachineUnsafe(conn, interval); err != nil {
-				errs = append(errs, err.Error())
-			}
-		}
-	}
-	if len(errs) > 0 {
-		return fmt.Errorf("возникли ошибки при запуске опроса: %s", strings.Join(errs, "; "))
-	}
-	return nil
-}
-
-func (s *PollingManager) StopAllPolling() {
-	s.pollsMutex.Lock()
-	defer s.pollsMutex.Unlock()
-
-	if !s.isPollingActive {
-		return
-	}
-
-	log.Println("Остановка всех процессов опроса...")
-	s.isPollingActive = false
-
-	for sessionID, poll := range s.activePolls {
-		poll.ticker.Stop()
-		poll.done <- true
-		close(poll.done)
-		delete(s.activePolls, sessionID)
-	}
-	log.Println("Все процессы опроса остановлены.")
 }
 
 func (s *PollingManager) CheckMachineConnection(endpointURL string) error {
@@ -195,6 +153,7 @@ func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachine
 	s.metadataMutex.RUnlock()
 
 	for _, machineData := range machineDataSlice {
+		// ИСПРАВЛЕНИЕ 2: Фильтруем данные по targetMachineID
 		if machineData.MachineId == targetMachineID {
 			s.repo.Set(machineData.MachineId, machineData)
 
@@ -207,7 +166,7 @@ func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachine
 			if err != nil {
 				log.Printf("ОШИБКА: не удалось отправить данные в Kafka для станка %s: %v", machineData.MachineId, err)
 			}
-			break
+			break // Нашли нужный станок, выходим из цикла
 		}
 	}
 }
@@ -282,4 +241,34 @@ func (s *PollingManager) extractComponentMetadata(components []models.ProbeCompo
 			s.extractComponentMetadata(comp.ComponentList.Components, deviceId)
 		}
 	}
+}
+
+// startPollingForMachineUnsafe является внутренним хелпером, не блокирует мьютекс и не пишет в БД
+func (s *PollingManager) startPollingForMachineUnsafe(sessionID, endpointURL, machineID string, interval time.Duration) {
+	if _, exists := s.activePolls[sessionID]; exists {
+		log.Printf("Опрос для сессии '%s' уже запущен, пропускаем.", sessionID)
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	done := make(chan bool)
+
+	s.activePolls[sessionID] = &activePoll{
+		ticker: ticker,
+		done:   done,
+	}
+
+	go func() {
+		log.Printf("Запуск опроса для сессии '%s' (станок: %s) с интервалом %v", sessionID, machineID, interval)
+		currentURL := strings.TrimSuffix(endpointURL, "/") + "/current"
+		for {
+			select {
+			case <-done:
+				log.Printf("Остановлен опрос для сессии '%s'", sessionID)
+				return
+			case <-ticker.C:
+				s.processSingleEndpoint(currentURL, machineID)
+			}
+		}
+	}()
 }

@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/domain/models"
 	"time"
 )
@@ -14,6 +15,7 @@ type MTConnectService interface {
 // ConnectionManager определяет контракт для управления пулом подключений.
 type ConnectionManager interface {
 	CreateConnection(req models.ConnectionRequest) (*models.ConnectionInfo, error)
+	RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error) // Новый метод
 	GetConnection(sessionID string) (*models.ConnectionInfo, bool)
 	GetAllConnections() []*models.ConnectionInfo
 	DeleteConnection(sessionID string) error
@@ -22,7 +24,7 @@ type ConnectionManager interface {
 
 // PollingManager определяет контракт для сервиса, опрашивающего эндпоинты.
 type PollingManager interface {
-	StartPolling(interval time.Duration) error
-	StopPolling() error
-	IsPollingActive() bool
+	StartPolling(conn *models.ConnectionInfo, interval time.Duration) error
+	StopPolling(sessionID string) error
+	IsPollingActive(sessionID string) bool
 }

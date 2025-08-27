@@ -1,33 +1,50 @@
 package handlers
 
 import (
+	"MTConnect/internal/domain/models"
+	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// StartPolling запускает опрос всех активных подключений
+// StartPolling запускает опрос для конкретного подключения
 func (h *Handler) StartPolling(c *gin.Context) {
-	intervalStr := c.DefaultQuery("interval", "1000") // Интервал по умолчанию 1000мс
-	interval, err := strconv.Atoi(intervalStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"Status": "error", "Message": "неверный параметр 'interval', ожидается целое число (миллисекунды)"})
+	var req models.PollingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Status": "error", "Message": err.Error()})
 		return
 	}
-	duration := time.Duration(interval) * time.Millisecond
 
-	if err := h.usecase.StartPolling(duration); err != nil {
+	duration := time.Duration(req.Interval) * time.Millisecond
+
+	if err := h.usecase.StartPolling(req.SessionID, duration); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"Status": "error", "Message": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"Status": "monitoring started"})
+	c.JSON(http.StatusOK, gin.H{
+		"Status":  "ok",
+		"Message": fmt.Sprintf("Polling started for session %s", req.SessionID),
+	})
 }
 
-// StopPolling останавливает опрос
+// StopPolling останавливает опрос для конкретного подключения
 func (h *Handler) StopPolling(c *gin.Context) {
-	_ = h.usecase.StopPolling()
-	c.JSON(http.StatusOK, gin.H{"Status": "monitoring stopped"})
+	var req models.SessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Status": "error", "Message": err.Error()})
+		return
+	}
+
+	if err := h.usecase.StopPolling(req.SessionID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"Status": "error", "Message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"Status":  "ok",
+		"Message": fmt.Sprintf("Polling stopped for session %s", req.SessionID),
+	})
 }

@@ -5,6 +5,7 @@ import "time"
 const (
 	StatusConnected    = "connected"
 	StatusDisconnected = "disconnected"
+	StatusPolled       = "polled"
 )
 
 type CncMachine struct {
@@ -14,5 +15,6 @@ type CncMachine struct {
 	Manufacturer string    `json:"manufacturer"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
-	Status       string    `gorm:"not null" json:"status"` // connected / disconnected
+	Status       string    `gorm:"not null" json:"status"` // connected / disconnected / polled
+	Interval     int       `json:"interval"`               // Интервал опроса в мс
 }
