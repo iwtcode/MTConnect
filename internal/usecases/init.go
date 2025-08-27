@@ -4,16 +4,12 @@ import "MTConnect/internal/interfaces"
 
 // UseCases - агрегатор всех use case интерфейсов
 type UseCases struct {
-	interfaces.ConnectionUsecase
+	interfaces.Usecases
 }
 
 // NewUsecases - конструктор для UseCases
 func NewUsecases(
-	repo interfaces.Repository,
-	pollSvc interfaces.PollingService,
-	connSvc interfaces.ConnectionService,
+	mtconnectSvc interfaces.MTConnectService,
 ) interfaces.Usecases {
-	return &UseCases{
-		ConnectionUsecase: NewConnectionUsecase(connSvc, pollSvc),
-	}
+	return NewUsecase(mtconnectSvc)
 }

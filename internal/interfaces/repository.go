@@ -1,11 +1,14 @@
 package interfaces
 
-import "MTConnect/internal/domain/entities"
+import (
+	"MTConnect/internal/domain/entities"
+	"MTConnect/internal/domain/models"
+)
 
 // Repository - это агрегирующий интерфейс для всех репозиториев
 type Repository interface {
 	DataStoreRepository
-	CncMachineRepository // Добавлено
+	CncMachineRepository
 }
 
 // CncMachineRepository определяет контракт для работы с сохраненными станками в БД
@@ -20,6 +23,6 @@ type CncMachineRepository interface {
 
 // DataStoreRepository определяет контракт для хранилища данных станков
 type DataStoreRepository interface {
-	Set(machineId string, data entities.MachineData)
-	Get(machineId string) (entities.MachineData, bool)
+	Set(machineId string, data models.MachineData)
+	Get(machineId string) (models.MachineData, bool)
 }

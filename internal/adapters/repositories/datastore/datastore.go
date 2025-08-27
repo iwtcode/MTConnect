@@ -1,7 +1,7 @@
 package datastore
 
 import (
-	"MTConnect/internal/domain/entities"
+	"MTConnect/internal/domain/models"
 	"MTConnect/internal/interfaces"
 	"sync"
 )
@@ -9,25 +9,25 @@ import (
 // DataStore - потокобезопасное in-memory хранилище данных
 type DataStore struct {
 	mu   sync.RWMutex
-	data map[string]entities.MachineData
+	data map[string]models.MachineData
 }
 
 // NewDataStore создает новый экземпляр DataStore
 func NewDataStore() interfaces.DataStoreRepository {
 	return &DataStore{
-		data: make(map[string]entities.MachineData),
+		data: make(map[string]models.MachineData),
 	}
 }
 
 // Set сохраняет данные для указанного станка
-func (ds *DataStore) Set(machineId string, data entities.MachineData) {
+func (ds *DataStore) Set(machineId string, data models.MachineData) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 	ds.data[machineId] = data
 }
 
 // Get извлекает данные для указанного станка
-func (ds *DataStore) Get(machineId string) (entities.MachineData, bool) {
+func (ds *DataStore) Get(machineId string) (models.MachineData, bool) {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 	machineData, found := ds.data[machineId]

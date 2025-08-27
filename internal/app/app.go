@@ -2,13 +2,14 @@ package app
 
 import (
 	"MTConnect/internal/adapters/handlers"
-	"MTConnect/internal/adapters/producers"
 	"MTConnect/internal/adapters/repositories/datastore"
-	"MTConnect/internal/adapters/repositories/postgres" // Изменено
+	"MTConnect/internal/adapters/repositories/postgres"
 	"MTConnect/internal/config"
-	"MTConnect/internal/domain/entities" // Добавлено
+	"MTConnect/internal/domain/entities"
+	"MTConnect/internal/domain/models"
 	"MTConnect/internal/interfaces"
-	"MTConnect/internal/services"
+	"MTConnect/internal/services/kafka"
+	"MTConnect/internal/services/mtconnect_service"
 	"MTConnect/internal/usecases"
 	"context"
 	"log"
@@ -27,7 +28,6 @@ func New() *fx.App {
 		ServiceModule,
 		UsecaseModule,
 		HttpServerModule,
-		// Добавляем вызов новой функции
 		fx.Invoke(InvokeRestoreConnections),
 	)
 }
@@ -38,35 +38,27 @@ var ConfigModule = fx.Module("config_module",
 	fx.Provide(config.LoadConfiguration),
 )
 
-// --- ИЗМЕНЕНИЕ: RepositoryModule теперь работает с PostgreSQL ---
 var RepositoryModule = fx.Module("repository_module",
 	fx.Provide(
-		// Провайдер для in-memory хранилища данных (остается)
 		datastore.NewDataStore,
-		// Провайдер для репозитория БД
 		postgres.NewRepository,
 	),
-	// Приводим конкретные реализации к общему интерфейсу Repository
 	fx.Provide(func(ds interfaces.DataStoreRepository, cncRepo interfaces.CncMachineRepository) interfaces.Repository {
-		return struct {
+		// Эта структура-обертка реализует общий интерфейс Repository
+		type repositoryImpl struct {
 			interfaces.DataStoreRepository
 			interfaces.CncMachineRepository
-		}{ds, cncRepo}
+		}
+		return repositoryImpl{ds, cncRepo}
 	}),
 )
 
 var ProducerModule = fx.Module("producer_module",
-	fx.Provide(producers.NewKafkaProducer),
+	fx.Provide(kafka.NewKafkaProducer),
 )
 
 var ServiceModule = fx.Module("service_module",
-	fx.Provide(
-		services.NewPollingService,
-		// Передаем новый репозиторий в сервис
-		func(pollSvc interfaces.PollingService, dbRepo interfaces.CncMachineRepository) interfaces.ConnectionService {
-			return services.NewConnectionService(pollSvc, dbRepo)
-		},
-	),
+	fx.Provide(mtconnect_service.NewMTConnectService),
 )
 
 var UsecaseModule = fx.Module("usecases_module",
@@ -81,15 +73,15 @@ var HttpServerModule = fx.Module("http_server_module",
 	fx.Invoke(InvokeHttpServer, InvokeGracefulShutdown),
 )
 
-// --- НОВАЯ ФУНКЦИЯ: Восстановление подключений при старте ---
-func InvokeRestoreConnections(lc fx.Lifecycle, connSvc interfaces.ConnectionService, dbRepo interfaces.CncMachineRepository) {
+// InvokeRestoreConnections восстанавливает активные подключения при старте приложения.
+func InvokeRestoreConnections(lc fx.Lifecycle, mtconnectSvc interfaces.MTConnectService, dbRepo interfaces.CncMachineRepository) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			log.Println("Восстановление активных подключений из базы данных...")
 			machines, err := dbRepo.GetAllByStatus(entities.StatusConnected)
 			if err != nil {
 				log.Printf("ОШИБКА: не удалось получить список активных станков из БД: %v", err)
-				return nil // Не блокируем запуск приложения из-за этой ошибки
+				return nil // Не блокируем запуск
 			}
 
 			if len(machines) == 0 {
@@ -99,14 +91,13 @@ func InvokeRestoreConnections(lc fx.Lifecycle, connSvc interfaces.ConnectionServ
 
 			for _, machine := range machines {
 				log.Printf("Попытка восстановить подключение для модели '%s' на '%s'", machine.Model, machine.EndpointURL)
-				req := entities.ConnectionRequest{
+				req := models.ConnectionRequest{
 					EndpointURL:  machine.EndpointURL,
 					Model:        machine.Model,
 					Manufacturer: machine.Manufacturer,
 				}
-				if _, err := connSvc.CreateConnection(req); err != nil {
+				if _, err := mtconnectSvc.CreateConnection(req); err != nil {
 					log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось восстановить подключение для сессии %s: %v", machine.SessionID, err)
-					// Обновляем статус в БД, чтобы не пытаться восстановить в следующий раз
 					if err := dbRepo.UpdateStatus(machine.SessionID, entities.StatusDisconnected); err != nil {
 						log.Printf("ОШИБКА: не удалось обновить статус для сессии %s в БД: %v", machine.SessionID, err)
 					}
@@ -119,9 +110,8 @@ func InvokeRestoreConnections(lc fx.Lifecycle, connSvc interfaces.ConnectionServ
 	})
 }
 
-// InvokeHttpServer запускает HTTP-сервер
+// InvokeHttpServer запускает HTTP-сервер.
 func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler) {
-	// ... (код функции остается без изменений)
 	serverAddr := ":" + cfg.ServerPort
 	server := &http.Server{
 		Addr:         serverAddr,
@@ -147,13 +137,12 @@ func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler) {
 	})
 }
 
-// InvokeGracefulShutdown обеспечивает корректное завершение работы сервисов
-func InvokeGracefulShutdown(lc fx.Lifecycle, poller interfaces.PollingService, producer interfaces.DataProducer) {
-	// ... (код функции остается без изменений)
+// InvokeGracefulShutdown обеспечивает корректное завершение работы сервисов.
+func InvokeGracefulShutdown(lc fx.Lifecycle, mtconnectSvc interfaces.MTConnectService, producer interfaces.KafkaService) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			log.Println("Корректное завершение работы сервисов...")
-			poller.StopAllPolling()
+			_ = mtconnectSvc.StopPolling() // Остановка опроса
 			if err := producer.Close(); err != nil {
 				log.Printf("Ошибка при закрытии Kafka продюсера: %v", err)
 				return err
