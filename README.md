@@ -68,6 +68,12 @@ GIN_MODE=debug
 # Kafka
 KAFKA_BROKER=localhost:9092
 KAFKA_TOPIC=mtconnect_data
+
+# Logger
+LOGGER_ENABLE=true
+LOGGER_LOGS_DIR=./logs
+LOGGER_LOG_LEVEL=DEBUG
+LOGGER_SAVING_DAYS=7
 ```
 
 3️⃣ **Запуск Apache Kafka**
