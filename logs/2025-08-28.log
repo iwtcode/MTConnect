@@ -38,3 +38,15 @@
 2025/08/28 13:53:51 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=220.2255ms client_ip=::1
 2025/08/28 13:53:52 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=POST path=/api/v1/connect/check remote_addr=[::1]:56904
 2025/08/28 13:53:52 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=359.8776ms client_ip=::1
+2025/08/28 14:09:43 [INFO] MTConnectAppServer is starting address=:8080
+2025/08/28 14:09:43 [INFO] MTConnectAppRestoring connections from the database...
+2025/08/28 14:09:43 [INFO] MTConnectAppAttempting to restore connection sessionID=ed931f4a-3225-4aa0-91d4-a7dc15c3177c model=Mazak Integrex 100-IV endpoint=https://smstestbed.nist.gov/vds
+2025/08/28 14:09:44 [INFO] MTConnectAppConnection restored successfully in pool sessionID=ed931f4a-3225-4aa0-91d4-a7dc15c3177c
+2025/08/28 14:09:44 [INFO] MTConnectAppAttempting to restore connection sessionID=1c01af99-ae70-4369-834f-9086ba3eb096 model=Agie Mikron HPM600U - GF Agie Charmilles HPM600U endpoint=https://smstestbed.nist.gov/vds
+2025/08/28 14:09:44 [INFO] MTConnectAppConnection restored successfully in pool sessionID=1c01af99-ae70-4369-834f-9086ba3eb096
+2025/08/28 14:09:44 [INFO] MTConnectAppStarting restored polling sessionID=1c01af99-ae70-4369-834f-9086ba3eb096 interval=1s
+2025/08/28 14:09:44 [INFO] MTConnectAppAttempting to restore connection sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238 model=Okuma MTConnect Adapter endpoint=http://localhost:5001/OKUMA
+2025/08/28 14:09:44 [INFO] MTConnectAppConnection restored successfully in pool sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238
+2025/08/28 14:09:44 [INFO] MTConnectAppStarting restored polling sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238 interval=1s
+2025/08/28 14:09:56 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=GET path=/api/v1/connect remote_addr=[::1]:56432
+2025/08/28 14:09:56 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=1.6749ms client_ip=::1
