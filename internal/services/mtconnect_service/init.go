@@ -15,6 +15,7 @@ type mtconnectService struct {
 }
 
 func NewMTConnectService(repo interfaces.Repository, producer interfaces.KafkaService) interfaces.MTConnectService {
+	// Изменено: Передаем только CncMachineRepository (который реализуется 'repo') в PollingManager
 	pollingManager := poller.NewPollingManager(repo, producer)
 	connectionManager := connector.NewConnectionManager(pollingManager, repo)
 

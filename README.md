@@ -2,9 +2,10 @@
 
 # MTConnect Streamer
 
+![alt text](https://img.shields.io/badge/Go-1.19+-00ADD8?logo=go)
 ![alt text](https://img.shields.io/badge/MTConnect-Compatible-blue)
 ![alt text](https://img.shields.io/badge/Apache%20Kafka-Integrated-blue?logo=apachekafka)
-![alt text](https://img.shields.io/badge/Go-1.19+-00ADD8?logo=go)
+![alt text](https://img.shields.io/badge/PostgreSQL-Supported-336791?logo=postgresql)
 ![alt text](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)
 ![alt text](https://img.shields.io/badge/License-MIT-green)
 
@@ -15,6 +16,7 @@
 ### ✨ Ключевые возможности
 - 🚀 **Потоковая передача в Kafka**: Все данные со станков в реальном времени отправляются в топик Apache Kafka для дальнейшей обработки и аналитики
 - 🕹️ **Управляемый опрос**: Запускайте и останавливайте мониторинг для каждого станка индивидуально через REST API с настраиваемым интервалом
+- 💾 **Персистентность**: Состояния подключений и опроса сохраняются в базе данных PostgreSQL, что позволяет автоматически восстанавливать их после перезапуска сервиса.
 - 🌐 **REST API**: Удобный HTTP API для получения актуальных данных, проверки доступности станков и управления процессами опроса
 - 🐳 **Простота развертывания**: Готовая конфигурация docker-compose.yml для быстрого запуска Apache Kafka и сопутствующих сервисов
 - 🎛️ **Веб-интерфейс для Kafka**: Встроенный Kafka UI для удобного просмотра топиков и сообщений
@@ -24,18 +26,18 @@
 
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌──────────────────┐
-│   Управляющий   │─────▸│     Сервис      │◂─────│    MTConnect     │
+│   Управляющий   ├─────▸│     Сервис      │◂─────┤    MTConnect     │
 │    REST API     │      │    MTConnect    │      │    Endpoints     │
 │   (Gin-Gonic)   │      │    (Go App)     │      │   (XML-данные)   │
+└─────────────────┘      └───────┬───┬─────┘      └──────────────────┘
+        ▴                        │   │      (Polling)
+        │                        │   └─────────────────────┐
+        │                        ▾                         ▾
+┌───────┴─────────┐      ┌─────────────────┐      ┌──────────────────┐
+│  Пользователь / │      │  PostgreSQL     │      │   Apache Kafka   │
+│     Система     │      │  (Состояния     │      │   (Потоковая     │
+│  (Управление)   │      │  подключений)   │      │   обработка)     │
 └─────────────────┘      └─────────────────┘      └──────────────────┘
-        ▲                        │   │
-        │                        │   └──────────────────┐
-        │ (GET /current)         │ (Polling)            ▼
-┌─────────────────┐              ▼             ┌──────────────────┐
-│  Пользователь / │    ┌──────────────────┐    │   Apache Kafka   │
-│     Система     │    │  In-Memory       │    │   (Потоковая     │
-│                 │◂───│  Data Store      │───▸│   обработка)     │
-└─────────────────┘    └──────────────────┘    └──────────────────┘
 ```
 
 ## 📦 Установка
@@ -52,29 +54,29 @@ cd MTConnect
 Откройте файл .env и при необходимости измените его
 
 ```dotenv
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=1234
+DB_NAME=mtconnect_db
+
 # App
 APP_PORT=8080
 GIN_MODE=debug
 
 # Kafka
 KAFKA_BROKER=localhost:9092
-KAFKA_TOPIC=opc-data
+KAFKA_TOPIC=mtconnect_data
 ```
-
-| Параметр | Описание | Пример |
-|---|---|---|
-| `APP_PORT` | Порт, на котором будет запущен HTTP-сервер	 | `8080` |
-| `GIN_MODE` | Режим работы Gin (debug или release) | `debug` |	
-| `KAFKA_BROKER` | Адрес брокера Kafka для подключения | `localhost:9092` |
-| `KAFKA_TOPIC` | Имя топика Kafka для отправки данных | `mtconnect_data` |
 
 3️⃣ **Запуск Apache Kafka**
 
 ```bash
-docker-compose up -d
+docker-compose up
 ```
 
-После запуска веб-интерфейс Kafka будет доступен по адресу http://localhost:8081
+После запуска [Веб-интерфейс Kafka](http://localhost:8081)
 
 Либо просмотреть сообщения сервера можно в реальном времени командой:<br>
 `docker-compose exec kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic mtconnect_data`
@@ -94,104 +96,172 @@ docker-compose up -d
 
 ## 🔌 API
 
-## Проверка доступности станка
+## Создание подключения
 
 ```http
-GET /api/{machineId}/check
+POST /connect
 ```
 
 ```bash
-curl -X GET "http://localhost:8080/api/Mazak/check"
+curl -X POST http://localhost:8080/api/v1/connect \
+-H "Content-Type: application/json" \
+-d '{
+    "EndpointURL": "http://localhost:5001/Mazak",
+    "Model": "Mazak VRX C600"
+}'
 ```
 
 ```json
 {
-  "status": "ok",
-  "message": "станок Mazak доступен"
-}
-```
-
-## Запуск опроса станка
-
-```http
-POST /api/{machineId}/polling/start?interval={ms}
-```
-
-```bash
-curl -X POST "http://localhost:8080/api/Mazak/polling/start?interval=1000"
-```
-
-```json
-{
-  "status": "ok",
-  "message": "опрос для станка Mazak запущен"
-}
-```
-
-## Остановка опроса станка
-
-```http
-POST /api/{machineId}/polling/stop
-```
-
-```bash
-curl -X POST "http://localhost:8080/api/Mazak/polling/stop"
-```
-
-```json
-{
-  "status": "ok",
-  "message": "опрос для станка Mazak остановлен"
-}
-```
-
-## Получение управляющей программы
-
-```http
-GET /api/{machineId}/program
-```
-
-```bash
-curl -X GET "http://localhost:8080/api/Mazak/program"
-```
-
-```json
-{
-  "machineId": "Mazak",
-  "message": "функционал получения управляющей программы пока не реализован",
-  "program": "G0 X0 Y0..."
-}
-```
-
-## Получение актуальных данных
-
-```http
-GET /api/{machineId}/current
-```
-
-```bash
-curl -X GET "http://localhost:8080/api/Mazak/current"
-```
-
-```json
-{
-  "MachineId": "Mazak",
-  "Id": "Mazak",
-  "Timestamp": "2025-08-21T13:03:34.401887Z",
-  "IsEnabled": true,
-  "MachineState": "ACTIVE",
-  "AxisInfos": [
-    {
-      "id": "x",
-      "name": "X",
-      "type": "LINEAR",
-      "data": { "position": "754.7812" }
+    "Status": "ok",
+    "connectionInfo": {
+        "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
+        "Config": {
+            "EndpointURL": "http://localhost:5001/Mazak",
+            "Model": "Mazak VRX C600"
+        },
+        "CreatedAt": "2025-08-28T12:19:21.2303802+03:00",
+        "LastUsed": "2025-08-28T12:19:21.2303802+03:00",
+        "UseCount": 1,
+        "IsHealthy": true
     }
-  ],
-  "Alarms": [],
-  "hasAlarms": false,
-  "PartsCount": { "ALL": "28" },
-  "...": "..."
+}
+```
+
+## Получение списка активных подключений
+
+```http
+GET /connect
+```
+
+```bash
+curl http://localhost:8080/api/v1/connect
+```
+
+```json
+{
+    "Connections": [
+        {
+            "SessionID": "bba81cc3-ad26-4e0b-9336-a8cc8bf54238",
+            "Config": {
+                "EndpointURL": "http://localhost:5001/OKUMA",
+                "Model": "Okuma MTConnect Adapter",
+                "Manufacturer": "OKUMA"
+            },
+            "CreatedAt": "2025-08-28T12:19:00.4920414+03:00",
+            "LastUsed": "2025-08-28T12:19:00.4920414+03:00",
+            "UseCount": 1,
+            "IsHealthy": true
+        },
+        {
+            "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
+            "Config": {
+                "EndpointURL": "http://localhost:5001/Mazak",
+                "Model": "Mazak VRX C600"
+            },
+            "CreatedAt": "2025-08-28T12:19:21.2303802+03:00",
+            "LastUsed": "2025-08-28T12:19:21.2303802+03:00",
+            "UseCount": 1,
+            "IsHealthy": true
+        }
+    ],
+    "PoolSize": 2,
+    "Status": "ok"
+}
+```
+
+## Проверка состояния подключения конкретного станка
+
+```http
+POST /connect/check
+```
+
+```bash
+curl -X POST http://localhost:8080/api/v1/connect/check \
+-H "Content-Type: application/json" \
+-d '{
+    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d"
+}'
+```
+
+```json
+{
+    "Status": "healthy",
+    "connectionInfo": {
+        "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
+        "Config": {
+            "EndpointURL": "http://localhost:5001/Mazak",
+            "Model": "Mazak VRX C600"
+        },
+        "CreatedAt": "2025-08-28T12:19:21.2303802+03:00",
+        "LastUsed": "2025-08-28T12:22:33.978361+03:00",
+        "UseCount": 2,
+        "IsHealthy": true
+    }
+}
+```
+
+## Запуск сбора данных
+
+```http
+POST /polling/start
+```
+
+```bash
+curl -X POST http://localhost:8080/api/v1/polling/start \
+-H "Content-Type: application/json" \
+-d '{
+    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
+    "Interval": 1000
+}'
+```
+
+```json
+{
+    "Message": "Polling started for session 870c5240-de93-4584-b411-37aa915cbc1d",
+    "Status": "ok"
+}
+```
+
+## Остановка сбора данных
+
+```http
+POST /polling/stop
+```
+
+```bash
+curl -X POST http://localhost:8080/api/v1/polling/stop \
+-H "Content-Type: application/json" \
+-d '{
+    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d"
+}'
+```
+
+```json
+{
+    "Message": "Polling stopped for session 870c5240-de93-4584-b411-37aa915cbc1d",
+    "Status": "ok"
+}
+```
+
+## Удаление подключения
+
+```http
+DELETE /connect
+```
+
+```bash
+curl -X DELETE http://localhost:8080/api/v1/connect \
+-H "Content-Type: application/json" \
+-d '{
+    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d"
+}'
+```
+
+```json
+{
+    "Message": "Session 870c5240-de93-4584-b411-37aa915cbc1d disconnected successfully",
+    "Status": "ok"
 }
 ```
 
@@ -199,23 +269,24 @@ curl -X GET "http://localhost:8080/api/Mazak/current"
 
 ```
 MTConnect/
-├── cmd/app/              # Главная точка входа приложения (main.go).
+├── cmd/app/                      # Главная точка входа приложения (main.go)
 ├── internal/
-│   ├── app/              # Сборка и запуск приложения с помощью Fx для DI.
-│   ├── config/           # Логика загрузки конфигурации из config.json.
+│   ├── app/                      # Сборка и запуск приложения с помощью Fx для DI
+│   ├── config/                   # Логика загрузки конфигурации из .env
 │   ├── adapters/
-│   │   ├── handlers/     # Обработчики HTTP-запросов (слой API на Gin).
-│   │   ├── producers/    # Продюсеры для внешних систем (реализация для Kafka).
-│   │   └── repositories/ # Реализации репозиториев (in-memory хранилище).
-│   ├── domain/           # Основные бизнес-сущности и модели (структуры данных MTConnect).
-│   ├── interfaces/       # Go-интерфейсы для всех слоев (контракты).
-│   ├── services/         # Конкретные сервисы (опрос эндпоинтов, парсинг XML).
-│   └── usecases/         # Сценарии использования (основная бизнес-логика).
+│   │   ├── handlers/             # Обработчики HTTP-запросов (слой API на Gin)
+│   │   └── repositories/         # Реализации репозиториев (PostgreSQL)
+│   ├── domain/                   # Основные бизнес-сущности (entities) и модели (models)
+│   ├── interfaces/               # Go-интерфейсы для всех слоев (контракты)
+│   ├── services/                 
+│   │   ├── kafka/                # Продюсер для Apache Kafka
+│   │   └── mtconnect_service/    # Основная бизнес-логика: управление подключениями, опрос, парсинг
+│   └── usecases/                 # Сценарии использования, связывающие API и сервисный слой
 ├── tools/
-│   └── build/            # Скрипт для сборки исполняемых файлов.
-├── build/                # Папка с готовыми исполняемыми файлами (создается после сборки).
-├── config.json           # Файл конфигурации.
-├── docker-compose.yml    # Файл для запуска Kafka и Kafka-UI.
+│   └── build/                    # Скрипт для сборки исполняемых файлов
+├── build/                        # Папка с готовыми исполняемыми файлами
+├── .env                          # Файл конфигурации
+├── docker-compose.yml            # Файл для запуска Kafka и Kafka-UI
 ├── LICENSE
 └── README.md
 ```
