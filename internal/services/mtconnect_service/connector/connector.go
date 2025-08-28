@@ -4,10 +4,10 @@ import (
 	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/domain/models"
 	"MTConnect/internal/interfaces"
+	"MTConnect/internal/middleware/logging"
 	"MTConnect/internal/services/mtconnect_service/client"
 	"encoding/xml"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -27,13 +27,15 @@ type ConnectionManager struct {
 	pool       map[string]*models.ConnectionInfo
 	pollingMgr PollingStarter
 	dbRepo     interfaces.CncMachineRepository
+	logger     *logging.Logger
 }
 
-func NewConnectionManager(pollingMgr PollingStarter, dbRepo interfaces.CncMachineRepository) *ConnectionManager {
+func NewConnectionManager(pollingMgr PollingStarter, dbRepo interfaces.CncMachineRepository, logger *logging.Logger) *ConnectionManager {
 	return &ConnectionManager{
 		pool:       make(map[string]*models.ConnectionInfo),
 		pollingMgr: pollingMgr,
 		dbRepo:     dbRepo,
+		logger:     logger.WithPrefix("CONNECTOR"),
 	}
 }
 
@@ -80,7 +82,7 @@ func (s *ConnectionManager) CreateConnection(req models.ConnectionRequest) (*mod
 	defer s.mu.Unlock()
 
 	sessionID := uuid.New().String()
-	log.Printf("Создается новое подключение для станка '%s' (%s). Новый SessionID: %s", req.Model, req.EndpointURL, sessionID)
+	s.logger.Info("Creating new connection", "model", req.Model, "endpoint", req.EndpointURL, "sessionID", sessionID)
 	machineToSave := &entities.CncMachine{
 		SessionID:    sessionID,
 		EndpointURL:  req.EndpointURL,
@@ -98,7 +100,7 @@ func (s *ConnectionManager) CreateConnection(req models.ConnectionRequest) (*mod
 	errCheck := s.pollingMgr.CheckMachineConnection(connInfo.Config.EndpointURL)
 	connInfo.IsHealthy = (errCheck == nil)
 	if !connInfo.IsHealthy {
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: Начальная проверка состояния для сессии %s провалена. Эндпоинт недоступен.", sessionID)
+		s.logger.Warn("Initial health check failed. Endpoint is unavailable.", "sessionID", sessionID)
 	}
 
 	s.pool[sessionID] = connInfo
@@ -123,24 +125,24 @@ func (s *ConnectionManager) RestoreConnection(machine entities.CncMachine) (*mod
 	probeURL := strings.TrimSuffix(machine.EndpointURL, "/") + "/probe"
 	xmlData, err := client.FetchXML(probeURL)
 	if err != nil {
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: Не удалось получить /probe для сессии %s: %v. Соединение будет восстановлено как нездоровое.", machine.SessionID, err)
+		s.logger.Warn("Failed to get /probe for session. Connection will be restored as unhealthy.", "sessionID", machine.SessionID, "error", err)
 	} else {
 		var devices models.MTConnectDevices
 		if err := xml.Unmarshal(xmlData, &devices); err != nil {
-			log.Printf("ПРЕДУПРЕЖДЕНИЕ: Не удалось распарсить /probe для сессии %s: %v.", machine.SessionID, err)
+			s.logger.Warn("Failed to parse /probe for session.", "sessionID", machine.SessionID, "error", err)
 		} else if len(devices.Devices) == 0 {
-			log.Printf("ПРЕДУПРЕЖДЕНИЕ: Устройства не найдены в /probe для сессии %s.", machine.SessionID)
+			s.logger.Warn("No devices found in /probe for session.", "sessionID", machine.SessionID)
 		} else {
 			targetDevice, err := findTargetDevice(&devices, machine.Model, machine.Manufacturer, machine.EndpointURL)
 			if err != nil {
-				log.Printf("ПРЕДУПРЕЖДЕНИЕ: Целевое устройство не найдено для сессии %s: %v.", machine.SessionID, err)
+				s.logger.Warn("Target device not found for session.", "sessionID", machine.SessionID, "error", err)
 			} else {
 				// Все успешно, обновляем информацию и статус
 				connInfo.MachineID = targetDevice.Name
 				connInfo.Config.Manufacturer = targetDevice.Description.Manufacturer
 				connInfo.IsHealthy = true
 				if err := s.pollingMgr.LoadMetadataForEndpoint(machine.EndpointURL); err != nil {
-					log.Printf("ПРЕДУПРЕЖДЕНИЕ: Не удалось загрузить метаданные для %s: %v", machine.EndpointURL, err)
+					s.logger.Warn("Failed to load metadata for endpoint.", "endpoint", machine.EndpointURL, "error", err)
 				}
 			}
 		}
@@ -183,7 +185,7 @@ func (s *ConnectionManager) DeleteConnection(sessionID string) error {
 			}
 			return fmt.Errorf("ошибка удаления сессии '%s' из БД: %w", sessionID, err)
 		}
-		log.Printf("Сессия '%s' (не в пуле) успешно удалена из БД.", sessionID)
+		s.logger.Info("Session (not in pool) successfully deleted from DB.", "sessionID", sessionID)
 		return nil
 	}
 
@@ -194,7 +196,7 @@ func (s *ConnectionManager) DeleteConnection(sessionID string) error {
 		return fmt.Errorf("ошибка удаления сессии '%s' из БД: %w", sessionID, err)
 	}
 
-	log.Printf("Сессия '%s' успешно удалена.", sessionID)
+	s.logger.Info("Session deleted successfully.", "sessionID", sessionID)
 	return nil
 }
 
@@ -214,7 +216,7 @@ func (s *ConnectionManager) CheckConnection(sessionID string) (*models.Connectio
 	conn.UseCount++
 
 	if previousHealth != conn.IsHealthy {
-		log.Printf("Статус здоровья сессии '%s' изменен: %v -> %v", sessionID, previousHealth, conn.IsHealthy)
+		s.logger.Info("Session health status changed", "sessionID", sessionID, "from", previousHealth, "to", conn.IsHealthy)
 	}
 
 	return conn, err

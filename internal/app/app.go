@@ -13,7 +13,6 @@ import (
 	"MTConnect/internal/services/mtconnect_service"
 	"MTConnect/internal/usecases"
 	"context"
-	"log"
 	"net/http"
 	"time"
 
@@ -168,7 +167,6 @@ func InvokeBackgroundHealthChecker(lc fx.Lifecycle, mtconnectSvc interfaces.Usec
 					case <-ticker.C:
 						connections := mtconnectSvc.GetAllConnections()
 						if len(connections) > 0 {
-							logger.Debug("Running periodic health checks...", "connection_count", len(connections))
 							for _, conn := range connections {
 								// Вызов CheckConnection обновит состояние IsHealthy в пуле. Результат нам здесь не важен.
 								_, _ = mtconnectSvc.CheckConnection(conn.SessionID)
@@ -205,7 +203,6 @@ func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler, lo
 			go func() {
 				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 					logger.Error("Failed to start server", "error", err)
-					log.Fatalf("Failed to start server: %v", err)
 				}
 			}()
 			return nil

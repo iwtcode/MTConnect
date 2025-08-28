@@ -4,6 +4,7 @@ import (
 	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/domain/models"
 	"MTConnect/internal/interfaces"
+	"MTConnect/internal/middleware/logging"
 	"MTConnect/internal/services/mtconnect_service/connector"
 	"MTConnect/internal/services/mtconnect_service/poller"
 	"time"
@@ -14,10 +15,9 @@ type mtconnectService struct {
 	pollMgr *poller.PollingManager
 }
 
-func NewMTConnectService(repo interfaces.Repository, producer interfaces.KafkaService) interfaces.MTConnectService {
-	// Изменено: Передаем только CncMachineRepository (который реализуется 'repo') в PollingManager
-	pollingManager := poller.NewPollingManager(repo, producer)
-	connectionManager := connector.NewConnectionManager(pollingManager, repo)
+func NewMTConnectService(repo interfaces.Repository, producer interfaces.KafkaService, logger *logging.Logger) interfaces.MTConnectService {
+	pollingManager := poller.NewPollingManager(repo, producer, logger)
+	connectionManager := connector.NewConnectionManager(pollingManager, repo, logger)
 
 	return &mtconnectService{
 		connMgr: connectionManager,

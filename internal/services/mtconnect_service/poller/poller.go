@@ -4,13 +4,13 @@ import (
 	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/domain/models"
 	"MTConnect/internal/interfaces"
+	"MTConnect/internal/middleware/logging"
 	"MTConnect/internal/services/mtconnect_service/client"
 	"MTConnect/internal/services/mtconnect_service/parser"
 	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +25,7 @@ type activePoll struct {
 type PollingManager struct {
 	dbRepo               interfaces.CncMachineRepository
 	producer             interfaces.KafkaService
+	logger               *logging.Logger
 	activePolls          map[string]*activePoll
 	pollsMutex           sync.Mutex
 	deviceMetadataStore  map[string]models.DataItemMetadata
@@ -34,10 +35,11 @@ type PollingManager struct {
 }
 
 // NewPollingManager - обновленный конструктор без in-memory репозитория.
-func NewPollingManager(dbRepo interfaces.CncMachineRepository, producer interfaces.KafkaService) *PollingManager {
+func NewPollingManager(dbRepo interfaces.CncMachineRepository, producer interfaces.KafkaService, logger *logging.Logger) *PollingManager {
 	return &PollingManager{
 		dbRepo:               dbRepo,
 		producer:             producer,
+		logger:               logger.WithPrefix("POLLER"),
 		activePolls:          make(map[string]*activePoll),
 		deviceMetadataStore:  make(map[string]models.DataItemMetadata),
 		axisDataItemLinks:    make(map[string]models.AxisDataItemLink),
@@ -76,12 +78,12 @@ func (s *PollingManager) StopPolling(sessionID string) error {
 	defer s.pollsMutex.Unlock()
 
 	if err := s.dbRepo.UpdatePollingState(sessionID, entities.StatusConnected, 0); err != nil {
-		log.Printf("Не удалось обновить статус для сессии %s в БД при остановке опроса: %v", sessionID, err)
+		s.logger.Error("Failed to update status in DB when stopping polling", "sessionID", sessionID, "error", err)
 	}
 
 	poll, exists := s.activePolls[sessionID]
 	if !exists {
-		log.Printf("Попытка остановить опрос для сессии '%s', который не был активен.", sessionID)
+		s.logger.Warn("Attempt to stop polling for a session that was not active.", "sessionID", sessionID)
 		return nil
 	}
 
@@ -118,12 +120,14 @@ func (s *PollingManager) CheckMachineConnection(endpointURL string) error {
 
 func (s *PollingManager) LoadMetadataForEndpoint(endpointURL string) error {
 	if err := s.fetchAndParseProbe(endpointURL); err != nil {
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: %v. Некоторые данные могут быть не распознаны.", err)
+		s.logger.Warn("Some data may not be recognized.", "error", err)
 		return err
 	}
-	log.Printf("Загружено %d уникальных DataItem'ов.", len(s.deviceMetadataStore))
-	log.Printf("Загружено %d ссылок на DataItem'ы осей.", len(s.axisDataItemLinks))
-	log.Printf("Загружено %d ссылок на DataItem'ы шпинделей.", len(s.spindleDataItemLinks))
+	s.logger.Info("Loaded DataItem metadata",
+		"dataItems", len(s.deviceMetadataStore),
+		"axisLinks", len(s.axisDataItemLinks),
+		"spindleLinks", len(s.spindleDataItemLinks),
+	)
 	return nil
 }
 
@@ -131,13 +135,13 @@ func (s *PollingManager) LoadMetadataForEndpoint(endpointURL string) error {
 func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachineID string) {
 	xmlData, err := client.FetchXML(endpointURL)
 	if err != nil {
-		log.Printf("ОШИБКА при получении XML с %s: %v\n", endpointURL, err)
+		s.logger.Error("Error fetching XML", "url", endpointURL, "error", err)
 		return
 	}
 
 	var streams models.MTConnectStreams
 	if err := xml.Unmarshal(xmlData, &streams); err != nil {
-		log.Printf("ОШИБКА при парсинге XML с %s: %v\n", endpointURL, err)
+		s.logger.Error("Error parsing XML", "url", endpointURL, "error", err)
 		return
 	}
 
@@ -151,12 +155,12 @@ func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachine
 
 			jsonData, err := json.Marshal(machineData)
 			if err != nil {
-				log.Printf("ОШИБКА: не удалось сериализовать MachineData для Kafka: %v", err)
+				s.logger.Error("Failed to serialize MachineData for Kafka", "error", err)
 				continue
 			}
 			err = s.producer.Produce(context.Background(), []byte(machineData.MachineId), jsonData)
 			if err != nil {
-				log.Printf("ОШИБКА: не удалось отправить данные в Kafka для станка %s: %v", machineData.MachineId, err)
+				s.logger.Error("Failed to send data to Kafka", "machineId", machineData.MachineId, "error", err)
 			}
 			break // Нашли нужный станок, выходим из цикла
 		}
@@ -165,7 +169,7 @@ func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachine
 
 func (s *PollingManager) fetchAndParseProbe(endpointURL string) error {
 	probeURL := strings.TrimSuffix(endpointURL, "/") + "/probe"
-	log.Printf("Загрузка метаданных с %s", probeURL)
+	s.logger.Info("Loading metadata", "url", probeURL)
 
 	xmlData, err := client.FetchXML(probeURL)
 	if err != nil {
@@ -234,7 +238,7 @@ func (s *PollingManager) extractComponentMetadata(components []models.ProbeCompo
 
 func (s *PollingManager) startPollingForMachineUnsafe(sessionID, endpointURL, machineID string, interval time.Duration) {
 	if _, exists := s.activePolls[sessionID]; exists {
-		log.Printf("Опрос для сессии '%s' уже запущен, пропускаем.", sessionID)
+		s.logger.Warn("Polling for session already started, skipping.", "sessionID", sessionID)
 		return
 	}
 
@@ -247,12 +251,12 @@ func (s *PollingManager) startPollingForMachineUnsafe(sessionID, endpointURL, ma
 	}
 
 	go func() {
-		log.Printf("Запуск опроса для сессии '%s' (станок: %s) с интервалом %v", sessionID, machineID, interval)
+		s.logger.Info("Starting polling", "sessionID", sessionID, "machineID", machineID, "interval", interval)
 		currentURL := strings.TrimSuffix(endpointURL, "/") + "/current"
 		for {
 			select {
 			case <-done:
-				log.Printf("Остановлен опрос для сессии '%s'", sessionID)
+				s.logger.Info("Polling stopped", "sessionID", sessionID)
 				return
 			case <-ticker.C:
 				s.processSingleEndpoint(currentURL, machineID)

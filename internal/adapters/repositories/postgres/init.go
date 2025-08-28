@@ -5,6 +5,7 @@ import (
 	"MTConnect/internal/config"
 	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/interfaces"
+	"MTConnect/internal/middleware/logging"
 	"fmt"
 	"log"
 	"os"
@@ -19,7 +20,7 @@ type Repository struct {
 	interfaces.CncMachineRepository
 }
 
-func NewRepository(cfg *config.AppConfig) (interfaces.CncMachineRepository, error) {
+func NewRepository(cfg *config.AppConfig, appLogger *logging.Logger) (interfaces.CncMachineRepository, error) {
 	// --- НАЧАЛО: Логика автоматического создания БД ---
 
 	// Шаг 1: Подключение к служебной БД 'postgres' для проверки и создания целевой БД
@@ -46,16 +47,16 @@ func NewRepository(cfg *config.AppConfig) (interfaces.CncMachineRepository, erro
 
 	// Шаг 3: Если БД не существует, создаем ее
 	if !exists {
-		log.Printf("База данных '%s' не найдена. Создание...", cfg.Database.DBName)
+		appLogger.Info("Database not found. Creating...", "db_name", cfg.Database.DBName)
 		// ВАЖНО: Имя БД здесь не параметризуется, так как CREATE DATABASE не поддерживает плейсхолдеры.
 		// Это безопасно, так как имя берется из файла конфигурации.
 		createDbQuery := fmt.Sprintf("CREATE DATABASE %s", cfg.Database.DBName)
 		if err := db.Exec(createDbQuery).Error; err != nil {
 			return nil, fmt.Errorf("не удалось создать БД '%s': %w", cfg.Database.DBName, err)
 		}
-		log.Printf("База данных '%s' успешно создана.", cfg.Database.DBName)
+		appLogger.Info("Database created successfully.", "db_name", cfg.Database.DBName)
 	} else {
-		log.Printf("База данных '%s' уже существует.", cfg.Database.DBName)
+		appLogger.Info("Database already exists.", "db_name", cfg.Database.DBName)
 	}
 
 	// Закрываем соединение со служебной БД
