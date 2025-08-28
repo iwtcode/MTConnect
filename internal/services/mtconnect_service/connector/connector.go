@@ -93,50 +93,64 @@ func (s *ConnectionManager) CreateConnection(req models.ConnectionRequest) (*mod
 	}
 
 	connInfo := createConnectionInfo(sessionID, targetDevice.Name, req, targetDevice.Description.Manufacturer)
+
+	// Начальная проверка состояния
+	errCheck := s.pollingMgr.CheckMachineConnection(connInfo.Config.EndpointURL)
+	connInfo.IsHealthy = (errCheck == nil)
+	if !connInfo.IsHealthy {
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: Начальная проверка состояния для сессии %s провалена. Эндпоинт недоступен.", sessionID)
+	}
+
 	s.pool[sessionID] = connInfo
 
 	return connInfo, nil
 }
 
-// RestoreConnection восстанавливает подключение из БД в пул памяти
+// RestoreConnection восстанавливает подключение из БД в пул памяти.
+// Эта функция теперь всегда успешна, даже если эндпоинт недоступен,
+// помечая такое соединение как IsHealthy: false.
 func (s *ConnectionManager) RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error) {
-	probeURL := strings.TrimSuffix(machine.EndpointURL, "/") + "/probe"
-	xmlData, err := client.FetchXML(probeURL)
-	if err != nil {
-		return nil, fmt.Errorf("не удалось получить /probe с %s для восстановления: %w", probeURL, err)
-	}
-
-	var devices models.MTConnectDevices
-	if err := xml.Unmarshal(xmlData, &devices); err != nil {
-		return nil, fmt.Errorf("не удалось распарсить /probe XML с %s для восстановления: %w", probeURL, err)
-	}
-
-	if len(devices.Devices) == 0 {
-		return nil, fmt.Errorf("устройства не найдены в /probe ответе от %s", probeURL)
-	}
-
-	targetDevice, err := findTargetDevice(&devices, machine.Model, machine.Manufacturer, machine.EndpointURL)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.pollingMgr.LoadMetadataForEndpoint(machine.EndpointURL); err != nil {
-		// Не критично для восстановления, просто логируем
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось загрузить метаданные для %s: %v", machine.EndpointURL, err)
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	req := models.ConnectionRequest{
 		EndpointURL:  machine.EndpointURL,
 		Model:        machine.Model,
 		Manufacturer: machine.Manufacturer,
 	}
 
-	connInfo := createConnectionInfo(machine.SessionID, targetDevice.Name, req, targetDevice.Description.Manufacturer)
+	// Создаем базовый объект подключения, по умолчанию нездоровый
+	connInfo := createConnectionInfo(machine.SessionID, "unknown", req, machine.Manufacturer)
+	connInfo.IsHealthy = false
+
+	probeURL := strings.TrimSuffix(machine.EndpointURL, "/") + "/probe"
+	xmlData, err := client.FetchXML(probeURL)
+	if err != nil {
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: Не удалось получить /probe для сессии %s: %v. Соединение будет восстановлено как нездоровое.", machine.SessionID, err)
+	} else {
+		var devices models.MTConnectDevices
+		if err := xml.Unmarshal(xmlData, &devices); err != nil {
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: Не удалось распарсить /probe для сессии %s: %v.", machine.SessionID, err)
+		} else if len(devices.Devices) == 0 {
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: Устройства не найдены в /probe для сессии %s.", machine.SessionID)
+		} else {
+			targetDevice, err := findTargetDevice(&devices, machine.Model, machine.Manufacturer, machine.EndpointURL)
+			if err != nil {
+				log.Printf("ПРЕДУПРЕЖДЕНИЕ: Целевое устройство не найдено для сессии %s: %v.", machine.SessionID, err)
+			} else {
+				// Все успешно, обновляем информацию и статус
+				connInfo.MachineID = targetDevice.Name
+				connInfo.Config.Manufacturer = targetDevice.Description.Manufacturer
+				connInfo.IsHealthy = true
+				if err := s.pollingMgr.LoadMetadataForEndpoint(machine.EndpointURL); err != nil {
+					log.Printf("ПРЕДУПРЕЖДЕНИЕ: Не удалось загрузить метаданные для %s: %v", machine.EndpointURL, err)
+				}
+			}
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.pool[machine.SessionID] = connInfo
 
+	// Всегда возвращаем информацию, ошибки логируются выше
 	return connInfo, nil
 }
 
@@ -193,10 +207,15 @@ func (s *ConnectionManager) CheckConnection(sessionID string) (*models.Connectio
 		return nil, fmt.Errorf("сессия '%s' не найдена", sessionID)
 	}
 
+	previousHealth := conn.IsHealthy
 	err := s.pollingMgr.CheckMachineConnection(conn.Config.EndpointURL)
 	conn.IsHealthy = (err == nil)
 	conn.LastUsed = time.Now()
 	conn.UseCount++
+
+	if previousHealth != conn.IsHealthy {
+		log.Printf("Статус здоровья сессии '%s' изменен: %v -> %v", sessionID, previousHealth, conn.IsHealthy)
+	}
 
 	return conn, err
 }
@@ -239,6 +258,6 @@ func createConnectionInfo(sessionID, machineID string, req models.ConnectionRequ
 		CreatedAt: time.Now(),
 		LastUsed:  time.Now(),
 		UseCount:  1,
-		IsHealthy: true,
+		IsHealthy: true, // По умолчанию true, но может быть немедленно перезаписано
 	}
 }

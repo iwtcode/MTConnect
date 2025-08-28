@@ -92,9 +92,9 @@ func (h *Handler) DeleteConnection(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param input body models.SessionRequest true "ID сессии для проверки"
-// @Success 200 {object} models.CheckConnectionResponse "Статус 'healthy'"
+// @Success 200 {object} models.CheckConnectionResponse "Статус 'healthy' или 'unhealthy'"
 // @Failure 400 {object} models.ErrorResponse "Неверный формат запроса"
-// @Failure 503 {object} models.ErrorResponse "Статус 'unhealthy'"
+// @Failure 404 {object} models.ErrorResponse "Подключение не найдено"
 // @Router /connect/check [post]
 func (h *Handler) CheckConnection(c *gin.Context) {
 	var req models.SessionRequest
@@ -104,10 +104,19 @@ func (h *Handler) CheckConnection(c *gin.Context) {
 	}
 
 	connInfo, err := h.usecase.CheckConnection(req.SessionID)
-	if err != nil {
-		h.ErrorResponse(c, err, http.StatusServiceUnavailable, "Connection is unhealthy", true)
+
+	// Если connInfo nil, значит сессия не найдена в принципе
+	if connInfo == nil {
+		h.NotFound(c, err)
 		return
 	}
 
+	// Если err не nil, значит соединение нездорово
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"Status": "unhealthy", "connectionInfo": connInfo})
+		return
+	}
+
+	// В противном случае все хорошо
 	c.JSON(http.StatusOK, gin.H{"Status": "healthy", "connectionInfo": connInfo})
 }

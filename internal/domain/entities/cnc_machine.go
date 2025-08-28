@@ -3,9 +3,9 @@ package entities
 import "time"
 
 const (
-	StatusConnected    = "connected"
-	StatusDisconnected = "disconnected"
-	StatusPolled       = "polled"
+	StatusConnected = "connected"
+	// StatusDisconnected = "disconnected" // -- Удалено
+	StatusPolled = "polled"
 )
 
 type CncMachine struct {
@@ -15,6 +15,6 @@ type CncMachine struct {
 	Manufacturer string    `json:"manufacturer"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
-	Status       string    `gorm:"not null" json:"status"` // connected / disconnected / polled
+	Status       string    `gorm:"not null" json:"status"` // connected / polled
 	Interval     int       `json:"interval"`               // Интервал опроса в мс
 }

@@ -31,6 +31,7 @@ func New() *fx.App {
 		UsecaseModule,
 		HttpServerModule,
 		fx.Invoke(InvokeRestoreConnections),
+		fx.Invoke(InvokeBackgroundHealthChecker), // Добавлена фоновая проверка
 	)
 }
 
@@ -115,34 +116,73 @@ func InvokeRestoreConnections(lc fx.Lifecycle, mtconnectSvc interfaces.Usecases,
 			}
 
 			for _, machine := range machines {
-				if machine.Status == entities.StatusDisconnected {
-					continue
-				}
-
 				logger.Info("Attempting to restore connection", "sessionID", machine.SessionID, "model", machine.Model, "endpoint", machine.EndpointURL)
 
-				connInfo, err := mtconnectSvc.RestoreConnection(machine)
-				if err != nil {
-					logger.Warn("Failed to restore connection", "sessionID", machine.SessionID, "error", err)
-					if err := dbRepo.UpdateStatus(machine.SessionID, entities.StatusDisconnected); err != nil {
-						logger.Error("Failed to update status in DB for session", "sessionID", machine.SessionID, "error", err)
-					}
-					continue
-				}
+				// Эта функция теперь не возвращает ошибку, а всегда добавляет в пул,
+				// помечая нездоровые подключения как IsHealthy: false.
+				connInfo, _ := mtconnectSvc.RestoreConnection(machine)
 
-				logger.Info("Connection restored successfully in pool", "sessionID", machine.SessionID)
+				if connInfo.IsHealthy {
+					logger.Info("Connection restored successfully in pool", "sessionID", machine.SessionID)
+				} else {
+					logger.Warn("Connection restored in pool but is unhealthy. Will retry in background.", "sessionID", machine.SessionID)
+				}
 
 				if machine.Status == entities.StatusPolled {
 					if machine.Interval > 0 {
 						interval := time.Duration(machine.Interval) * time.Millisecond
 						logger.Info("Starting restored polling", "sessionID", machine.SessionID, "interval", interval)
+						// Попытка запуска опроса. Если соединение нездорово, опрос не запустится,
+						// но и не вызовет критической ошибки.
 						if err := mtconnectSvc.StartPolling(connInfo.SessionID, interval); err != nil {
-							logger.Warn("Failed to start polling for session", "sessionID", machine.SessionID, "error", err)
+							logger.Warn("Failed to start polling for restored session (it may be unhealthy)", "sessionID", machine.SessionID, "error", err)
 						}
 					} else {
 						logger.Warn("Status for session is 'polled' but interval is not set. Polling not started.", "sessionID", machine.SessionID)
 					}
 				}
+			}
+			return nil
+		},
+	})
+}
+
+// InvokeBackgroundHealthChecker запускает фоновую задачу для периодической проверки состояния всех подключений.
+func InvokeBackgroundHealthChecker(lc fx.Lifecycle, mtconnectSvc interfaces.Usecases, logger *logging.Logger) {
+	const checkInterval = 1 * time.Second
+	var done chan bool
+
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			logger.Info("Starting background health checker", "interval", checkInterval)
+			done = make(chan bool)
+			go func() {
+				ticker := time.NewTicker(checkInterval)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-done:
+						logger.Info("Background health checker stopped.")
+						return
+					case <-ticker.C:
+						connections := mtconnectSvc.GetAllConnections()
+						if len(connections) > 0 {
+							logger.Debug("Running periodic health checks...", "connection_count", len(connections))
+							for _, conn := range connections {
+								// Вызов CheckConnection обновит состояние IsHealthy в пуле. Результат нам здесь не важен.
+								_, _ = mtconnectSvc.CheckConnection(conn.SessionID)
+							}
+						}
+					}
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			logger.Info("Stopping background health checker...")
+			if done != nil {
+				close(done)
 			}
 			return nil
 		},
