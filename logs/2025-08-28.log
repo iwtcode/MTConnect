@@ -1,0 +1,40 @@
+2025/08/28 12:57:57 [INFO] APPStarting server address=http://localhost:8080
+2025/08/28 12:57:57 [INFO] APPRestoring connections from the database...
+2025/08/28 12:57:57 [INFO] APPAttempting to restore connection sessionID=1c01af99-ae70-4369-834f-9086ba3eb096 model=Agie Mikron HPM600U - GF Agie Charmilles HPM600U endpoint=https://smstestbed.nist.gov/vds
+2025/08/28 12:57:59 [INFO] APPConnection successfully restored to the pool sessionID=1c01af99-ae70-4369-834f-9086ba3eb096
+2025/08/28 12:57:59 [INFO] APPStarting restored polling sessionID=1c01af99-ae70-4369-834f-9086ba3eb096 interval=1s
+2025/08/28 12:57:59 [INFO] APPAttempting to restore connection sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238 model=Okuma MTConnect Adapter endpoint=http://localhost:5001/OKUMA
+2025/08/28 12:57:59 [INFO] APPConnection successfully restored to the pool sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238
+2025/08/28 12:57:59 [INFO] APPStarting restored polling sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238 interval=1s
+2025/08/28 12:57:59 [INFO] APPAttempting to restore connection sessionID=ed931f4a-3225-4aa0-91d4-a7dc15c3177c model=Mazak Integrex 100-IV endpoint=https://smstestbed.nist.gov/vds
+2025/08/28 12:57:59 [INFO] APPConnection successfully restored to the pool sessionID=ed931f4a-3225-4aa0-91d4-a7dc15c3177c
+2025/08/28 12:58:34 [DEBUG] APP[HTTP-HANDLER] Fetched all active connections count=3
+2025/08/28 12:58:34 [INFO] APP[HTTP-HANDLER] Request handled status=200 method=GET path=/api/v1/connect ip=::1 latency=513.5µs user_agent=curl/8.11.0
+2025/08/28 13:06:52 [INFO] APP[HTTP-HANDLER] Connection health check successful sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238
+2025/08/28 13:06:52 [INFO] APP[HTTP-HANDLER] Request handled status=200 method=POST path=/api/v1/connect/check ip=::1 latency=2.2789ms user_agent=curl/8.11.0
+2025/08/28 13:07:03 [WARN] APP[HTTP-HANDLER] Connection health check failed sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238 error=agent at http://localhost:5001/OKUMA is unreachable: проверка соединения с эндпоинтом 'http://localhost:5001/OKUMA' провалена: ошибка выполнения запроса к http://localhost:5001/OKUMA/probe: Get "http://localhost:5001/OKUMA/probe": dial tcp [::1]:5001: connectex: No connection could be made because the target machine actively refused it.
+2025/08/28 13:07:03 [INFO] APP[HTTP-HANDLER] Request handled status=503 method=POST path=/api/v1/connect/check ip=::1 latency=2.1218ms user_agent=curl/8.11.0
+2025/08/28 13:07:13 [INFO] APP[HTTP-HANDLER] Connection health check successful sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238
+2025/08/28 13:07:13 [INFO] APP[HTTP-HANDLER] Request handled status=200 method=POST path=/api/v1/connect/check ip=::1 latency=2.05ms user_agent=curl/8.11.0
+2025/08/28 13:52:56 [INFO] MTConnectAppServer is starting address=:8080
+2025/08/28 13:52:56 [INFO] MTConnectAppRestoring connections from the database...
+2025/08/28 13:52:56 [INFO] MTConnectAppAttempting to restore connection sessionID=ed931f4a-3225-4aa0-91d4-a7dc15c3177c model=Mazak Integrex 100-IV endpoint=https://smstestbed.nist.gov/vds
+2025/08/28 13:52:57 [INFO] MTConnectAppConnection restored successfully in pool sessionID=ed931f4a-3225-4aa0-91d4-a7dc15c3177c
+2025/08/28 13:52:57 [INFO] MTConnectAppAttempting to restore connection sessionID=1c01af99-ae70-4369-834f-9086ba3eb096 model=Agie Mikron HPM600U - GF Agie Charmilles HPM600U endpoint=https://smstestbed.nist.gov/vds
+2025/08/28 13:52:57 [INFO] MTConnectAppConnection restored successfully in pool sessionID=1c01af99-ae70-4369-834f-9086ba3eb096
+2025/08/28 13:52:57 [INFO] MTConnectAppStarting restored polling sessionID=1c01af99-ae70-4369-834f-9086ba3eb096 interval=1s
+2025/08/28 13:52:57 [INFO] MTConnectAppAttempting to restore connection sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238 model=Okuma MTConnect Adapter endpoint=http://localhost:5001/OKUMA
+2025/08/28 13:52:57 [INFO] MTConnectAppConnection restored successfully in pool sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238
+2025/08/28 13:52:57 [INFO] MTConnectAppStarting restored polling sessionID=bba81cc3-ad26-4e0b-9336-a8cc8bf54238 interval=1s
+2025/08/28 13:53:18 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=GET path=/api/v1/connect remote_addr=[::1]:56894
+2025/08/28 13:53:18 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=1.1976ms client_ip=::1
+2025/08/28 13:53:42 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=POST path=/api/v1/connect/check remote_addr=[::1]:56904
+2025/08/28 13:53:42 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=191.3747ms client_ip=::1
+2025/08/28 13:53:47 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=POST path=/api/v1/connect/check remote_addr=[::1]:56904
+2025/08/28 13:53:47 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=205.4167ms client_ip=::1
+2025/08/28 13:53:50 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=POST path=/api/v1/connect/check remote_addr=[::1]:56904
+2025/08/28 13:53:50 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=205.1745ms client_ip=::1
+2025/08/28 13:53:51 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=POST path=/api/v1/connect/check remote_addr=[::1]:56904
+2025/08/28 13:53:51 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=220.2255ms client_ip=::1
+2025/08/28 13:53:52 [INFO] MTConnectApp[HANDLER] [HTTP] Request started method=POST path=/api/v1/connect/check remote_addr=[::1]:56904
+2025/08/28 13:53:52 [INFO] MTConnectApp[HANDLER] [HTTP] Request completed status=200 latency=359.8776ms client_ip=::1

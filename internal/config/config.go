@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -12,7 +13,16 @@ type AppConfig struct {
 	KafkaBroker string
 	KafkaTopic  string
 	GinMode     string
-	Database    DatabaseConfig // Добавлено
+	Database    DatabaseConfig
+	Logging     LoggerConfig // Добавлено
+}
+
+// LoggerConfig содержит настройки логгера
+type LoggerConfig struct {
+	Enable     bool
+	LogsDir    string
+	Level      string
+	SavingDays int
 }
 
 // DatabaseConfig содержит конфигурацию для подключения к базе данных
@@ -40,15 +50,37 @@ func LoadConfiguration() (*AppConfig, error) {
 			Password: getEnv("DB_PASSWORD", "root"),
 			DBName:   getEnv("DB_NAME", "mtconnect_db"),
 		},
+		Logging: LoggerConfig{ // Добавлено
+			Enable:     getEnvAsBool("LOGGER_ENABLE", true),
+			LogsDir:    getEnv("LOGGER_LOGS_DIR", "./logs"),
+			Level:      getEnv("LOGGER_LOG_LEVEL", "DEBUG"),
+			SavingDays: getEnvAsInt("LOGGER_SAVING_DAYS", 7),
+		},
 	}
 
 	return config, nil
 }
 
-// getEnv - вспомогательная функция для получения переменной окружения с fallback-значением
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
 	}
 	return fallback
+}
+
+func getEnvAsInt(name string, defaultValue int) int {
+	valueStr := getEnv(name, "")
+	if value, err := strconv.Atoi(valueStr); err == nil {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	val, _ := strconv.ParseBool(value)
+	return val
 }

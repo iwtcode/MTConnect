@@ -1,0 +1,279 @@
+basePath: /api/v1
+definitions:
+  models.CheckConnectionResponse:
+    properties:
+      Status:
+        example: healthy
+        type: string
+      connectionInfo:
+        $ref: '#/definitions/models.ConnectionInfo'
+    type: object
+  models.ConnectionConfig:
+    properties:
+      EndpointURL:
+        type: string
+      Manufacturer:
+        type: string
+      Model:
+        type: string
+    type: object
+  models.ConnectionInfo:
+    properties:
+      Config:
+        $ref: '#/definitions/models.ConnectionConfig'
+      CreatedAt:
+        type: string
+      IsHealthy:
+        type: boolean
+      LastUsed:
+        type: string
+      SessionID:
+        type: string
+      UseCount:
+        type: integer
+    type: object
+  models.ConnectionRequest:
+    properties:
+      EndpointURL:
+        type: string
+      Manufacturer:
+        type: string
+      Model:
+        type: string
+    required:
+    - EndpointURL
+    - Model
+    type: object
+  models.CreateConnectionResponse:
+    properties:
+      Status:
+        example: ok
+        type: string
+      connectionInfo:
+        $ref: '#/definitions/models.ConnectionInfo'
+    type: object
+  models.ErrorResponse:
+    properties:
+      Status:
+        example: error
+        type: string
+      error:
+        properties:
+          code:
+            example: 404
+            type: integer
+          message:
+            example: Подключение не найдено
+            type: string
+        type: object
+    type: object
+  models.GetConnectionsResponse:
+    properties:
+      Connections:
+        items:
+          $ref: '#/definitions/models.ConnectionInfo'
+        type: array
+      PoolSize:
+        example: 2
+        type: integer
+      Status:
+        example: ok
+        type: string
+    type: object
+  models.MessageResponse:
+    properties:
+      Message:
+        example: Polling started successfully
+        type: string
+      Status:
+        example: ok
+        type: string
+    type: object
+  models.PollingRequest:
+    properties:
+      Interval:
+        description: в миллисекундах
+        type: integer
+      SessionID:
+        type: string
+    required:
+    - Interval
+    - SessionID
+    type: object
+  models.SessionRequest:
+    properties:
+      SessionID:
+        type: string
+    required:
+    - SessionID
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API для работы с протоколом MTConnect и отправки данных в Kafka.
+  title: MTConnect Service API
+  version: 1.0.0
+paths:
+  /connect:
+    delete:
+      consumes:
+      - application/json
+      description: Удаляет подключение из пула и базы данных по его SessionID.
+      parameters:
+      - description: ID сессии для удаления
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.SessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Сообщение об успешном удалении
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Подключение не найдено
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Удалить подключение
+      tags:
+      - Connection
+    get:
+      description: Возвращает текущий пул активных MTConnect подключений.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список активных подключений
+          schema:
+            $ref: '#/definitions/models.GetConnectionsResponse'
+      summary: Получить список подключений
+      tags:
+      - Connection
+    post:
+      consumes:
+      - application/json
+      description: Создает новое подключение к станку по его EndpointURL и модели.
+      parameters:
+      - description: Данные для подключения
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.ConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешное создание подключения
+          schema:
+            $ref: '#/definitions/models.CreateConnectionResponse'
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Создать подключение
+      tags:
+      - Connection
+  /connect/check:
+    post:
+      consumes:
+      - application/json
+      description: Проверяет доступность эндпоинта, связанного с указанным SessionID.
+      parameters:
+      - description: ID сессии для проверки
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.SessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Статус 'healthy'
+          schema:
+            $ref: '#/definitions/models.CheckConnectionResponse'
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "503":
+          description: Статус 'unhealthy'
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Проверить состояние подключения
+      tags:
+      - Connection
+  /polling/start:
+    post:
+      consumes:
+      - application/json
+      description: Запускает периодический сбор данных для подключения по SessionID
+        с заданным интервалом.
+      parameters:
+      - description: Параметры для запуска опроса
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.PollingRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Сообщение об успешном запуске
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Запустить опрос
+      tags:
+      - Polling
+  /polling/stop:
+    post:
+      consumes:
+      - application/json
+      description: Останавливает сбор данных для подключения по SessionID.
+      parameters:
+      - description: ID сессии для остановки опроса
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.SessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Сообщение об успешной остановке
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Неверный формат запроса
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Остановить опрос
+      tags:
+      - Polling
+swagger: "2.0"

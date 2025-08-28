@@ -7,6 +7,8 @@ import (
 	"MTConnect/internal/config"
 	"MTConnect/internal/domain/entities"
 	"MTConnect/internal/interfaces"
+	"MTConnect/internal/middleware/logging"
+	"MTConnect/internal/middleware/swagger"
 	"MTConnect/internal/services/kafka"
 	"MTConnect/internal/services/mtconnect_service"
 	"MTConnect/internal/usecases"
@@ -22,6 +24,7 @@ import (
 func New() *fx.App {
 	return fx.New(
 		ConfigModule,
+		LoggingModule, // Добавлен модуль логгера
 		RepositoryModule,
 		ProducerModule,
 		ServiceModule,
@@ -35,6 +38,21 @@ func New() *fx.App {
 
 var ConfigModule = fx.Module("config_module",
 	fx.Provide(config.LoadConfiguration),
+)
+
+// Модуль логгера
+func ProvideLogger(cfg *config.AppConfig) *logging.Logger {
+	loggerCfg := &logging.Config{
+		Enabled:    cfg.Logging.Enable,
+		Level:      cfg.Logging.Level,
+		LogsDir:    cfg.Logging.LogsDir,
+		SavingDays: uint(cfg.Logging.SavingDays),
+	}
+	return logging.NewLogger(loggerCfg, "MTConnectApp")
+}
+
+var LoggingModule = fx.Module("logging_module",
+	fx.Provide(ProvideLogger),
 )
 
 var RepositoryModule = fx.Module("repository_module",
@@ -63,8 +81,17 @@ var UsecaseModule = fx.Module("usecases_module",
 	fx.Provide(usecases.NewUsecases),
 )
 
+// Конфигуратор Swagger
+func NewSwaggerConfig() *swagger.Config {
+	return &swagger.Config{
+		Enabled: true,
+		Path:    "/swagger",
+	}
+}
+
 var HttpServerModule = fx.Module("http_server_module",
 	fx.Provide(
+		NewSwaggerConfig, // Добавлен провайдер Swagger
 		handlers.NewHandler,
 		handlers.ProvideRouter,
 	),
@@ -72,18 +99,18 @@ var HttpServerModule = fx.Module("http_server_module",
 )
 
 // InvokeRestoreConnections восстанавливает подключения и опросы при старте приложения.
-func InvokeRestoreConnections(lc fx.Lifecycle, mtconnectSvc interfaces.Usecases, dbRepo interfaces.CncMachineRepository) {
+func InvokeRestoreConnections(lc fx.Lifecycle, mtconnectSvc interfaces.Usecases, dbRepo interfaces.CncMachineRepository, logger *logging.Logger) {
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			log.Println("Восстановление подключений из базы данных...")
+			logger.Info("Restoring connections from the database...")
 			machines, err := dbRepo.GetAll()
 			if err != nil {
-				log.Printf("ОШИБКА: не удалось получить список станков из БД: %v", err)
+				logger.Error("Failed to get machine list from DB", "error", err)
 				return nil
 			}
 
 			if len(machines) == 0 {
-				log.Println("Не найдено сохраненных подключений для восстановления.")
+				logger.Info("No saved connections found to restore.")
 				return nil
 			}
 
@@ -92,30 +119,28 @@ func InvokeRestoreConnections(lc fx.Lifecycle, mtconnectSvc interfaces.Usecases,
 					continue
 				}
 
-				log.Printf("Попытка восстановить подключение для сессии '%s' (%s на %s)", machine.SessionID, machine.Model, machine.EndpointURL)
+				logger.Info("Attempting to restore connection", "sessionID", machine.SessionID, "model", machine.Model, "endpoint", machine.EndpointURL)
 
-				// ИСПРАВЛЕНО: Вызываем новый метод RestoreConnection вместо CreateConnection
 				connInfo, err := mtconnectSvc.RestoreConnection(machine)
 				if err != nil {
-					log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось восстановить подключение для сессии %s: %v", machine.SessionID, err)
+					logger.Warn("Failed to restore connection", "sessionID", machine.SessionID, "error", err)
 					if err := dbRepo.UpdateStatus(machine.SessionID, entities.StatusDisconnected); err != nil {
-						log.Printf("ОШИБКА: не удалось обновить статус для сессии %s в БД: %v", machine.SessionID, err)
+						logger.Error("Failed to update status in DB for session", "sessionID", machine.SessionID, "error", err)
 					}
 					continue
 				}
 
-				log.Printf("Подключение для сессии '%s' успешно восстановлено в пуле.", machine.SessionID)
+				logger.Info("Connection restored successfully in pool", "sessionID", machine.SessionID)
 
 				if machine.Status == entities.StatusPolled {
 					if machine.Interval > 0 {
 						interval := time.Duration(machine.Interval) * time.Millisecond
-						log.Printf("Запуск восстановленного опроса для сессии '%s' с интервалом %v.", machine.SessionID, interval)
-						// Передаем восстановленный connInfo, который уже есть в пуле
+						logger.Info("Starting restored polling", "sessionID", machine.SessionID, "interval", interval)
 						if err := mtconnectSvc.StartPolling(connInfo.SessionID, interval); err != nil {
-							log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось запустить опрос для сессии %s: %v", machine.SessionID, err)
+							logger.Warn("Failed to start polling for session", "sessionID", machine.SessionID, "error", err)
 						}
 					} else {
-						log.Printf("ПРЕДУПРЕЖДЕНИЕ: статус для сессии %s - 'polled', но интервал не задан. Опрос не запущен.", machine.SessionID)
+						logger.Warn("Status for session is 'polled' but interval is not set. Polling not started.", "sessionID", machine.SessionID)
 					}
 				}
 			}
@@ -125,7 +150,7 @@ func InvokeRestoreConnections(lc fx.Lifecycle, mtconnectSvc interfaces.Usecases,
 }
 
 // InvokeHttpServer запускает HTTP-сервер.
-func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler) {
+func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler, logger *logging.Logger) {
 	serverAddr := ":" + cfg.ServerPort
 	server := &http.Server{
 		Addr:         serverAddr,
@@ -136,41 +161,42 @@ func InvokeHttpServer(lc fx.Lifecycle, cfg *config.AppConfig, h http.Handler) {
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			log.Printf("Сервер запущен на http://localhost%s", serverAddr)
+			logger.Info("Server is starting", "address", serverAddr)
 			go func() {
 				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					log.Fatalf("Не удалось запустить сервер: %v", err)
+					logger.Error("Failed to start server", "error", err)
+					log.Fatalf("Failed to start server: %v", err)
 				}
 			}()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			log.Println("Остановка HTTP-сервера...")
+			logger.Info("Stopping HTTP server...")
 			return server.Shutdown(ctx)
 		},
 	})
 }
 
 // InvokeGracefulShutdown обеспечивает корректное завершение работы сервисов.
-func InvokeGracefulShutdown(lc fx.Lifecycle, mtconnectSvc interfaces.MTConnectService, producer interfaces.KafkaService) {
+func InvokeGracefulShutdown(lc fx.Lifecycle, mtconnectSvc interfaces.MTConnectService, producer interfaces.KafkaService, logger *logging.Logger) {
 	lc.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
-			log.Println("Корректное завершение работы сервисов...")
+			logger.Info("Gracefully shutting down services...")
 
 			connections := mtconnectSvc.GetAllConnections()
 			for _, conn := range connections {
 				if mtconnectSvc.IsPollingActive(conn.SessionID) {
-					log.Printf("Остановка опроса для сессии %s при завершении работы...", conn.SessionID)
+					logger.Info("Stopping polling on shutdown", "sessionID", conn.SessionID)
 					if err := mtconnectSvc.StopPolling(conn.SessionID); err != nil {
-						log.Printf("Ошибка при остановке опроса для %s: %v", conn.SessionID, err)
+						logger.Error("Error stopping polling", "sessionID", conn.SessionID, "error", err)
 					}
 				}
 			}
 
 			if err := producer.Close(); err != nil {
-				log.Printf("Ошибка при закрытии Kafka продюсера: %v", err)
+				logger.Error("Error closing Kafka producer", "error", err)
 			}
-			log.Println("Все сервисы успешно остановлены.")
+			logger.Info("All services stopped successfully.")
 			return nil
 		},
 	})
