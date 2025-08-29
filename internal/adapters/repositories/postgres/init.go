@@ -1,15 +1,16 @@
 package postgres
 
 import (
-	"MTConnect/internal/adapters/repositories/postgres/cnc_machine"
-	"MTConnect/internal/config"
-	"MTConnect/internal/domain/entities"
-	"MTConnect/internal/interfaces"
-	"MTConnect/internal/middleware/logging"
 	"fmt"
 	"log"
 	"os"
 	"time"
+
+	"github.com/iwtcode/MTConnect/internal/adapters/repositories/postgres/cnc_machine"
+	"github.com/iwtcode/MTConnect/internal/config"
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
+	"github.com/iwtcode/MTConnect/internal/middleware/logging"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

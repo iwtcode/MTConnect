@@ -1,13 +1,14 @@
 package mtconnect_service
 
 import (
-	"MTConnect/internal/domain/entities"
-	"MTConnect/internal/domain/models"
-	"MTConnect/internal/interfaces"
-	"MTConnect/internal/middleware/logging"
-	"MTConnect/internal/services/mtconnect_service/connector"
-	"MTConnect/internal/services/mtconnect_service/poller"
 	"time"
+
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/domain/models"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
+	"github.com/iwtcode/MTConnect/internal/middleware/logging"
+	"github.com/iwtcode/MTConnect/internal/services/mtconnect_service/connector"
+	"github.com/iwtcode/MTConnect/internal/services/mtconnect_service/poller"
 )
 
 type mtconnectService struct {

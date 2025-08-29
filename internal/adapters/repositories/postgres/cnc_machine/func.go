@@ -1,7 +1,7 @@
 package cnc_machine
 
 import (
-	"MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
 
 	"gorm.io/gorm"
 )

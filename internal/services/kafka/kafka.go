@@ -1,9 +1,10 @@
 package kafka
 
 import (
-	"MTConnect/internal/config"
-	"MTConnect/internal/interfaces"
 	"context"
+
+	"github.com/iwtcode/MTConnect/internal/config"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
 
 	"github.com/segmentio/kafka-go"
 )

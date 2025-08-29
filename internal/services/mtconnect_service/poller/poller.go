@@ -1,12 +1,6 @@
 package poller
 
 import (
-	"MTConnect/internal/domain/entities"
-	"MTConnect/internal/domain/models"
-	"MTConnect/internal/interfaces"
-	"MTConnect/internal/middleware/logging"
-	"MTConnect/internal/services/mtconnect_service/client"
-	"MTConnect/internal/services/mtconnect_service/parser"
 	"context"
 	"encoding/json"
 	"encoding/xml"
@@ -14,6 +8,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/domain/models"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
+	"github.com/iwtcode/MTConnect/internal/middleware/logging"
+	"github.com/iwtcode/MTConnect/internal/services/mtconnect_service/client"
+	"github.com/iwtcode/MTConnect/internal/services/mtconnect_service/parser"
 )
 
 type activePoll struct {

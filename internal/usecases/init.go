@@ -1,6 +1,6 @@
 package usecases
 
-import "MTConnect/internal/interfaces"
+import "github.com/iwtcode/MTConnect/internal/interfaces"
 
 // UseCases - агрегатор всех use case интерфейсов
 type UseCases struct {

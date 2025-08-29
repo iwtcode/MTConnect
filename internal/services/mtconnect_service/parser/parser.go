@@ -1,12 +1,13 @@
 package parser
 
 import (
-	"MTConnect/internal/domain/models"
 	"fmt"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/iwtcode/MTConnect/internal/domain/models"
 )
 
 // formatAccumulatedTime преобразует строку с секундами в формат "ЧЧ:ММ:СС".

@@ -1,8 +1,9 @@
 package handlers
 
 import (
-	"MTConnect/pkg/errors"
 	"net/http"
+
+	"github.com/iwtcode/MTConnect/pkg/errors"
 
 	"github.com/gin-gonic/gin"
 )

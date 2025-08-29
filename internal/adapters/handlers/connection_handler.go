@@ -1,8 +1,9 @@
 package handlers
 
 import (
-	"MTConnect/internal/domain/models"
 	"net/http"
+
+	"github.com/iwtcode/MTConnect/internal/domain/models"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,11 +1,12 @@
 package handlers
 
 import (
-	"MTConnect/internal/config"
-	"MTConnect/internal/interfaces"
-	"MTConnect/internal/middleware/logging"
-	"MTConnect/internal/middleware/swagger"
 	"net/http"
+
+	"github.com/iwtcode/MTConnect/internal/config"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
+	"github.com/iwtcode/MTConnect/internal/middleware/logging"
+	"github.com/iwtcode/MTConnect/internal/middleware/swagger"
 
 	"github.com/gin-gonic/gin"
 )

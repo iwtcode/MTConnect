@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	"MTConnect/internal/middleware/logging"
 	"net/http"
 	"time"
+
+	"github.com/iwtcode/MTConnect/internal/middleware/logging"
 
 	"github.com/gin-gonic/gin"
 )

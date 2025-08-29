@@ -1,19 +1,20 @@
 package app
 
 import (
-	"MTConnect/internal/adapters/handlers"
-	"MTConnect/internal/adapters/repositories/postgres"
-	"MTConnect/internal/config"
-	"MTConnect/internal/domain/entities"
-	"MTConnect/internal/interfaces"
-	"MTConnect/internal/middleware/logging"
-	"MTConnect/internal/middleware/swagger"
-	"MTConnect/internal/services/kafka"
-	"MTConnect/internal/services/mtconnect_service"
-	"MTConnect/internal/usecases"
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/iwtcode/MTConnect/internal/adapters/handlers"
+	"github.com/iwtcode/MTConnect/internal/adapters/repositories/postgres"
+	"github.com/iwtcode/MTConnect/internal/config"
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
+	"github.com/iwtcode/MTConnect/internal/middleware/logging"
+	"github.com/iwtcode/MTConnect/internal/middleware/swagger"
+	"github.com/iwtcode/MTConnect/internal/services/kafka"
+	"github.com/iwtcode/MTConnect/internal/services/mtconnect_service"
+	"github.com/iwtcode/MTConnect/internal/usecases"
 
 	"go.uber.org/fx"
 )

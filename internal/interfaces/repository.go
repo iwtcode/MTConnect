@@ -1,7 +1,7 @@
 package interfaces
 
 import (
-	"MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
 )
 
 // CncMachineRepository определяет контракт для работы с сохраненными станками в БД

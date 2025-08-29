@@ -274,7 +274,7 @@ curl -X DELETE http://localhost:8080/api/v1/connect \
 ## 🔧 Структура проекта
 
 ```
-MTConnect/
+github.com/iwtcode/MTConnect/
 ├── cmd/app/                      # Главная точка входа приложения (main.go)
 ├── internal/
 │   ├── app/                      # Сборка и запуск приложения с помощью Fx для DI
@@ -299,7 +299,7 @@ MTConnect/
 
 ## 🆘 Поддержка
 
-- 🐛 [Создайте issue](https://github.com/iwtcode/MTConnect/issues)
+- 🐛 [Создайте issue](https://github.com/iwtcode/github.com/iwtcode/MTConnect/issues)
 - 📧 Напишите на email: iwtcode@gmail.com
 
 ## 📝 Лицензия

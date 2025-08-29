@@ -1,9 +1,10 @@
 package interfaces
 
 import (
-	"MTConnect/internal/domain/entities"
-	"MTConnect/internal/domain/models"
 	"time"
+
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/domain/models"
 )
 
 // MTConnectService - это агрегирующий интерфейс для всей бизнес-логики.

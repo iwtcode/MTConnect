@@ -1,6 +1,6 @@
 package interfaces
 
-import "MTConnect/internal/domain/models"
+import "github.com/iwtcode/MTConnect/internal/domain/models"
 
 // ConnectionService определяет контракт для управления пулом подключений.
 type ConnectionService interface {

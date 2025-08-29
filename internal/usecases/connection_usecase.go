@@ -1,11 +1,12 @@
 package usecases
 
 import (
-	"MTConnect/internal/domain/entities"
-	"MTConnect/internal/domain/models"
-	"MTConnect/internal/interfaces"
 	"fmt"
 	"time"
+
+	"github.com/iwtcode/MTConnect/internal/domain/entities"
+	"github.com/iwtcode/MTConnect/internal/domain/models"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
 )
 
 type Usecase struct {

@@ -5,7 +5,7 @@
 // @BasePath /api/v1
 package main
 
-import "MTConnect/internal/app"
+import "github.com/iwtcode/MTConnect/internal/app"
 
 func main() {
 	// Создаем и запускаем новый экземпляр приложения fx

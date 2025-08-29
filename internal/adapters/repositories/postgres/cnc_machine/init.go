@@ -1,7 +1,7 @@
 package cnc_machine
 
 import (
-	"MTConnect/internal/interfaces"
+	"github.com/iwtcode/MTConnect/internal/interfaces"
 
 	"gorm.io/gorm"
 )
