@@ -15,7 +15,7 @@ type MTConnectService interface {
 // ConnectionManager определяет контракт для управления пулом подключений.
 type ConnectionManager interface {
 	CreateConnection(req models.ConnectionRequest) (*models.ConnectionInfo, error)
-	RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error) // Новый метод
+	RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error)
 	GetConnection(sessionID string) (*models.ConnectionInfo, bool)
 	GetAllConnections() []*models.ConnectionInfo
 	DeleteConnection(sessionID string) error
