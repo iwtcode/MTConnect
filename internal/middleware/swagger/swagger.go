@@ -5,7 +5,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	_ "github.com/iwtcode/MTConnect/docs" // Важно: путь до сгенерированных docs
+	_ "github.com/iwtcode/MTConnect/docs"
 )
 
 // Config содержит настройки для Swagger

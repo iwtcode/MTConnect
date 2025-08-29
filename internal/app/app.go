@@ -23,14 +23,14 @@ import (
 func New() *fx.App {
 	return fx.New(
 		ConfigModule,
-		LoggingModule, // Добавлен модуль логгера
+		LoggingModule,
 		RepositoryModule,
 		ProducerModule,
 		ServiceModule,
 		UsecaseModule,
 		HttpServerModule,
 		fx.Invoke(InvokeRestoreConnections),
-		fx.Invoke(InvokeBackgroundHealthChecker), // Добавлена фоновая проверка
+		fx.Invoke(InvokeBackgroundHealthChecker),
 	)
 }
 
@@ -83,7 +83,7 @@ func NewSwaggerConfig() *swagger.Config {
 
 var HttpServerModule = fx.Module("http_server_module",
 	fx.Provide(
-		NewSwaggerConfig, // Добавлен провайдер Swagger
+		NewSwaggerConfig,
 		handlers.NewHandler,
 		handlers.ProvideRouter,
 	),
@@ -160,7 +160,6 @@ func InvokeBackgroundHealthChecker(lc fx.Lifecycle, mtconnectSvc interfaces.Usec
 						connections := mtconnectSvc.GetAllConnections()
 						if len(connections) > 0 {
 							for _, conn := range connections {
-								// Вызов CheckConnection обновит состояние IsHealthy в пуле. Результат нам здесь не важен.
 								_, _ = mtconnectSvc.CheckConnection(conn.SessionID)
 							}
 						}

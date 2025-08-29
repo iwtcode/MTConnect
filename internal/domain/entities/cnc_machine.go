@@ -4,8 +4,7 @@ import "time"
 
 const (
 	StatusConnected = "connected"
-	// StatusDisconnected = "disconnected" // -- Удалено
-	StatusPolled = "polled"
+	StatusPolled    = "polled"
 )
 
 type CncMachine struct {

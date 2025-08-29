@@ -10,7 +10,7 @@ import (
 // Usecases - это агрегирующий интерфейс для всех use cases
 type Usecases interface {
 	CreateConnection(req models.ConnectionRequest) (*models.ConnectionInfo, error)
-	RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error) // Новый метод
+	RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error)
 	GetAllConnections() []*models.ConnectionInfo
 	DeleteConnection(sessionID string) error
 	CheckConnection(sessionID string) (*models.ConnectionInfo, error)

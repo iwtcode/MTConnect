@@ -53,7 +53,7 @@ func NewLogger(cfg *Config, prefix string) *Logger {
 func (l *Logger) WithPrefix(prefix string) *Logger {
 	newPrefix := l.prefix
 	if newPrefix != "" {
-		newPrefix += " " // Добавляем разделитель, если базовый префикс не пустой
+		newPrefix += " "
 	}
 	newPrefix += "[" + prefix + "]"
 
@@ -89,7 +89,6 @@ func (l *Logger) log(level, msg string, fields ...interface{}) {
 		return
 	}
 
-	// ИЗМЕНЕНИЕ: Добавлен пробел между префиксом и сообщением.
 	message := fmt.Sprintf("[%s] %s %s", level, l.prefix, msg)
 
 	var builder strings.Builder

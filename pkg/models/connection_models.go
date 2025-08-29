@@ -17,7 +17,7 @@ type SessionRequest struct {
 // PollingRequest определяет структуру для запроса на запуск опроса.
 type PollingRequest struct {
 	SessionID string `json:"session_id" binding:"required"`
-	Interval  int    `json:"interval" binding:"required,gt=0"` // в миллисекундах
+	Interval  int    `json:"interval" binding:"required,gt=0"`
 }
 
 // ConnectionConfig содержит проверенную конфигурацию подключения.
@@ -30,7 +30,7 @@ type ConnectionConfig struct {
 // ConnectionInfo представляет активное подключение в пуле.
 type ConnectionInfo struct {
 	SessionID string           `json:"session_id"`
-	MachineID string           `json:"-"` // Внутренний идентификатор станка из probe
+	MachineID string           `json:"-"`
 	Config    ConnectionConfig `json:"config"`
 	CreatedAt time.Time        `json:"created_at"`
 	LastUsed  time.Time        `json:"last_used"`

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 
-	// Важно: импортируем модели из нового публичного пакета
 	"github.com/iwtcode/MTConnect/pkg/models"
 )
 

@@ -22,8 +22,6 @@ type Repository struct {
 }
 
 func NewRepository(cfg *config.AppConfig, appLogger *logging.Logger) (interfaces.CncMachineRepository, error) {
-	// --- НАЧАЛО: Логика автоматического создания БД ---
-
 	// Шаг 1: Подключение к служебной БД 'postgres' для проверки и создания целевой БД
 	dsnPostgres := fmt.Sprintf("host=%s user=%s password=%s dbname=postgres port=%s sslmode=disable",
 		cfg.Database.Host,
@@ -49,8 +47,6 @@ func NewRepository(cfg *config.AppConfig, appLogger *logging.Logger) (interfaces
 	// Шаг 3: Если БД не существует, создаем ее
 	if !exists {
 		appLogger.Info("Database not found. Creating...", "db_name", cfg.Database.DBName)
-		// ВАЖНО: Имя БД здесь не параметризуется, так как CREATE DATABASE не поддерживает плейсхолдеры.
-		// Это безопасно, так как имя берется из файла конфигурации.
 		createDbQuery := fmt.Sprintf("CREATE DATABASE %s", cfg.Database.DBName)
 		if err := db.Exec(createDbQuery).Error; err != nil {
 			return nil, fmt.Errorf("не удалось создать БД '%s': %w", cfg.Database.DBName, err)
@@ -63,8 +59,6 @@ func NewRepository(cfg *config.AppConfig, appLogger *logging.Logger) (interfaces
 	// Закрываем соединение со служебной БД
 	sqlDB, _ := db.DB()
 	_ = sqlDB.Close()
-
-	// --- КОНЕЦ: Логика автоматического создания БД ---
 
 	// Шаг 4: Основное подключение к целевой базе данных
 	dsnApp := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",

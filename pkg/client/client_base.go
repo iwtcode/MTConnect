@@ -18,7 +18,6 @@ type ClientService struct {
 
 // NewClientService создает новый экземпляр ClientService.
 func NewClientService(host string) *ClientService {
-	// Убираем возможный слэш в конце хоста для унификации
 	host = strings.TrimSuffix(host, "/")
 
 	return &ClientService{
@@ -29,7 +28,6 @@ func NewClientService(host string) *ClientService {
 
 // createRequestJSONWithContext создает HTTP-запрос с заголовком application/json.
 func (s *ClientService) createRequestJSONWithContext(ctx context.Context, httpMethod, urlPath string, queryParams map[string]string, reqBody io.Reader) (*http.Request, error) {
-	// Убираем возможный слэш в начале пути
 	urlPath = strings.TrimPrefix(urlPath, "/")
 	fullURL := fmt.Sprintf("%s/%s", s.Host, urlPath)
 
@@ -63,7 +61,6 @@ func (s *ClientService) doRequest(req *http.Request) ([]byte, *http.Response, er
 		return nil, resp, err
 	}
 
-	// Восстанавливаем Body, чтобы его можно было прочитать снова, если потребуется
 	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	if resp.StatusCode != http.StatusOK {

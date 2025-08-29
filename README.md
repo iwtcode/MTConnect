@@ -1,6 +1,6 @@
 <div align="center">
 
-# MTConnect Streamer
+# MTConnect Service
 
 ![alt text](https://img.shields.io/badge/Go-1.19+-00ADD8?logo=go)
 ![alt text](https://img.shields.io/badge/MTConnect-Compatible-blue)
@@ -9,7 +9,7 @@
 ![alt text](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)
 ![alt text](https://img.shields.io/badge/License-MIT-green)
 
-*Сервис для сбора данных по протоколу MTConnect, их отправки в Apache Kafka и управления через REST API*
+*Сервис для сбора данных по протоколу MTConnect, отправки в Apache Kafka и управления через REST API*
 
 </div>
 
@@ -112,24 +112,25 @@ POST /connect
 curl -X POST http://localhost:8080/api/v1/connect \
 -H "Content-Type: application/json" \
 -d '{
-    "EndpointURL": "http://localhost:5001/Mazak",
-    "Model": "Mazak VRX C600"
+    "endpoint_url": "http://localhost:5001/Mazak",
+    "model": "Mazak VRX C600"
 }'
 ```
 
 ```json
 {
-    "Status": "ok",
-    "connectionInfo": {
-        "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
-        "Config": {
-            "EndpointURL": "http://localhost:5001/Mazak",
-            "Model": "Mazak VRX C600"
+    "status": "ok",
+    "connection_info": {
+        "session_id": "870c5240-de93-4584-b411-37aa915cbc1d",
+        "config": {
+            "endpoint_url": "http://localhost:5001/Mazak",
+            "model": "Mazak VRX C600",
+            "manufacturer": "Mazak"
         },
-        "CreatedAt": "2025-08-28T12:19:21.2303802+03:00",
-        "LastUsed": "2025-08-28T12:19:21.2303802+03:00",
-        "UseCount": 1,
-        "IsHealthy": true
+        "created_at": "2025-08-28T12:19:21.2303802+03:00",
+        "last_used": "2025-08-28T12:19:21.2303802+03:00",
+        "use_count": 1,
+        "is_healthy": true
     }
 }
 ```
@@ -146,33 +147,34 @@ curl http://localhost:8080/api/v1/connect
 
 ```json
 {
-    "Connections": [
+    "status": "ok",
+    "pool_size": 2,
+    "connections": [
         {
-            "SessionID": "bba81cc3-ad26-4e0b-9336-a8cc8bf54238",
-            "Config": {
-                "EndpointURL": "http://localhost:5001/OKUMA",
-                "Model": "Okuma MTConnect Adapter",
-                "Manufacturer": "OKUMA"
+            "session_id": "bba81cc3-ad26-4e0b-9336-a8cc8bf54238",
+            "config": {
+                "endpoint_url": "http://localhost:5001/OKUMA",
+                "model": "Okuma MTConnect Adapter",
+                "manufacturer": "OKUMA"
             },
-            "CreatedAt": "2025-08-28T12:19:00.4920414+03:00",
-            "LastUsed": "2025-08-28T12:19:00.4920414+03:00",
-            "UseCount": 1,
-            "IsHealthy": true
+            "created_at": "2025-08-28T12:19:00.4920414+03:00",
+            "last_used": "2025-08-28T12:19:00.4920414+03:00",
+            "use_count": 1,
+            "is_healthy": true
         },
         {
-            "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
-            "Config": {
-                "EndpointURL": "http://localhost:5001/Mazak",
-                "Model": "Mazak VRX C600"
+            "session_id": "870c5240-de93-4584-b411-37aa915cbc1d",
+            "config": {
+                "endpoint_url": "http://localhost:5001/Mazak",
+                "model": "Mazak VRX C600",
+                "manufacturer": "Mazak"
             },
-            "CreatedAt": "2025-08-28T12:19:21.2303802+03:00",
-            "LastUsed": "2025-08-28T12:19:21.2303802+03:00",
-            "UseCount": 1,
-            "IsHealthy": true
+            "created_at": "2025-08-28T12:19:21.2303802+03:00",
+            "last_used": "2025-08-28T12:19:21.2303802+03:00",
+            "use_count": 1,
+            "is_healthy": true
         }
-    ],
-    "PoolSize": 2,
-    "Status": "ok"
+    ]
 }
 ```
 
@@ -186,23 +188,24 @@ POST /connect/check
 curl -X POST http://localhost:8080/api/v1/connect/check \
 -H "Content-Type: application/json" \
 -d '{
-    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d"
+    "session_id": "870c5240-de93-4584-b411-37aa915cbc1d"
 }'
 ```
 
 ```json
 {
-    "Status": "healthy",
-    "connectionInfo": {
-        "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
-        "Config": {
-            "EndpointURL": "http://localhost:5001/Mazak",
-            "Model": "Mazak VRX C600"
+    "status": "healthy",
+    "connection_info": {
+        "session_id": "870c5240-de93-4584-b411-37aa915cbc1d",
+        "config": {
+            "endpoint_url": "http://localhost:5001/Mazak",
+            "model": "Mazak VRX C600",
+            "manufacturer": "Mazak"
         },
-        "CreatedAt": "2025-08-28T12:19:21.2303802+03:00",
-        "LastUsed": "2025-08-28T12:22:33.978361+03:00",
-        "UseCount": 2,
-        "IsHealthy": true
+        "created_at": "2025-08-28T12:19:21.2303802+03:00",
+        "last_used": "2025-08-28T12:22:33.978361+03:00",
+        "use_count": 2,
+        "is_healthy": true
     }
 }
 ```
@@ -217,15 +220,15 @@ POST /polling/start
 curl -X POST http://localhost:8080/api/v1/polling/start \
 -H "Content-Type: application/json" \
 -d '{
-    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d",
-    "Interval": 1000
+    "session_id": "870c5240-de93-4584-b411-37aa915cbc1d",
+    "interval": 1000
 }'
 ```
 
 ```json
 {
-    "Message": "Polling started for session 870c5240-de93-4584-b411-37aa915cbc1d",
-    "Status": "ok"
+    "status": "ok",
+    "message": "Polling started for session 870c5240-de93-4584-b411-37aa915cbc1d"
 }
 ```
 
@@ -239,14 +242,14 @@ POST /polling/stop
 curl -X POST http://localhost:8080/api/v1/polling/stop \
 -H "Content-Type: application/json" \
 -d '{
-    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d"
+    "session_id": "870c5240-de93-4584-b411-37aa915cbc1d"
 }'
 ```
 
 ```json
 {
-    "Message": "Polling stopped for session 870c5240-de93-4584-b411-37aa915cbc1d",
-    "Status": "ok"
+    "status": "ok",
+    "message": "Polling stopped for session 870c5240-de93-4584-b411-37aa915cbc1d"
 }
 ```
 
@@ -260,21 +263,21 @@ DELETE /connect
 curl -X DELETE http://localhost:8080/api/v1/connect \
 -H "Content-Type: application/json" \
 -d '{
-    "SessionID": "870c5240-de93-4584-b411-37aa915cbc1d"
+    "session_id": "870c5240-de93-4584-b411-37aa915cbc1d"
 }'
 ```
 
 ```json
 {
-    "Message": "Session 870c5240-de93-4584-b411-37aa915cbc1d disconnected successfully",
-    "Status": "ok"
+    "status": "ok",
+    "message": "Session 870c5240-de93-4584-b411-37aa915cbc1d disconnected successfully"
 }
 ```
 
 ## 🔧 Структура проекта
 
 ```
-github.com/iwtcode/MTConnect/
+MTConnect/
 ├── cmd/app/                      # Главная точка входа приложения (main.go)
 ├── internal/
 │   ├── app/                      # Сборка и запуск приложения с помощью Fx для DI
@@ -288,6 +291,9 @@ github.com/iwtcode/MTConnect/
 │   │   ├── kafka/                # Продюсер для Apache Kafka
 │   │   └── mtconnect_service/    # Основная бизнес-логика: управление подключениями, опрос, парсинг
 │   └── usecases/                 # Сценарии использования, связывающие API и сервисный слой
+├── pkg/
+│   ├── client/                   # Клиентская библиотека для API
+│   └── models/                   # Публичные модели для использования в клиенте
 ├── tools/
 │   └── build/                    # Скрипт для сборки исполняемых файлов
 ├── build/                        # Папка с готовыми исполняемыми файлами

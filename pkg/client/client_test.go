@@ -9,8 +9,7 @@ import (
 	"github.com/iwtcode/MTConnect/pkg/models"
 )
 
-// ВНИМАНИЕ: Для запуска этого теста должен быть запущен MTConnect сервис на localhost:8080
-// и эмулятор MTConnect агента на http://localhost:5001/Mazak
+// Для запуска теста должен быть запущен MTConnect сервис на localhost:8080
 func TestFullClientWorkflow(t *testing.T) {
 	// Инициализация клиента
 	api := NewClient("http://localhost:8080")
@@ -58,7 +57,7 @@ func TestFullClientWorkflow(t *testing.T) {
 	log.Println("Шаг 4: Запуск опроса данных...")
 	startPollReq := models.PollingRequest{
 		SessionID: sessionID,
-		Interval:  1000, // 1 секунда
+		Interval:  1000,
 	}
 	startMsg, _, err := api.StartPolling(ctx, startPollReq)
 	if err != nil {

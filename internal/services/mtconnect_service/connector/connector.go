@@ -97,7 +97,6 @@ func (s *ConnectionManager) CreateConnection(req models.ConnectionRequest) (*mod
 
 	connInfo := createConnectionInfo(sessionID, targetDevice.Name, req, targetDevice.Description.Manufacturer)
 
-	// Начальная проверка состояния
 	errCheck := s.pollingMgr.CheckMachineConnection(connInfo.Config.EndpointURL)
 	connInfo.IsHealthy = (errCheck == nil)
 	if !connInfo.IsHealthy {
@@ -153,7 +152,6 @@ func (s *ConnectionManager) RestoreConnection(machine entities.CncMachine) (*mod
 	defer s.mu.Unlock()
 	s.pool[machine.SessionID] = connInfo
 
-	// Всегда возвращаем информацию, ошибки логируются выше
 	return connInfo, nil
 }
 
@@ -261,6 +259,6 @@ func createConnectionInfo(sessionID, machineID string, req models.ConnectionRequ
 		CreatedAt: time.Now(),
 		LastUsed:  time.Now(),
 		UseCount:  1,
-		IsHealthy: true, // По умолчанию true, но может быть немедленно перезаписано
+		IsHealthy: true,
 	}
 }

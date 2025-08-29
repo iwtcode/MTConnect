@@ -107,7 +107,7 @@ type Device struct {
 	Name          string         `xml:"name,attr"`
 	UUID          string         `xml:"uuid,attr"`
 	ID            string         `xml:"id,attr"`
-	Description   *Description   `xml:"Description"` // Изменено для парсинга атрибутов и значения
+	Description   *Description   `xml:"Description"`
 	DataItems     []DataItem     `xml:"DataItems>DataItem"`
 	ComponentList *ComponentList `xml:"Components"`
 }

@@ -14,7 +14,7 @@ type AppConfig struct {
 	KafkaTopic  string
 	GinMode     string
 	Database    DatabaseConfig
-	Logging     LoggerConfig // Добавлено
+	Logging     LoggerConfig
 }
 
 // LoggerConfig содержит настройки логгера

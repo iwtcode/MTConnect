@@ -9,9 +9,9 @@ type CncMachineRepository interface {
 	Create(machine *entities.CncMachine) error
 	GetByEndpointAndModel(endpointURL, model string) (*entities.CncMachine, error)
 	UpdateStatus(sessionID, status string) error
-	UpdatePollingState(sessionID, status string, interval int) error // Новый метод
+	UpdatePollingState(sessionID, status string, interval int) error
 	Delete(sessionID string) error
 	GetBySessionID(sessionID string) (*entities.CncMachine, error)
 	GetAllByStatus(status string) ([]entities.CncMachine, error)
-	GetAll() ([]entities.CncMachine, error) // Новый метод для восстановления
+	GetAll() ([]entities.CncMachine, error)
 }

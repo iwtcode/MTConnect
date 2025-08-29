@@ -32,10 +32,10 @@ type PollingManager struct {
 	deviceMetadataStore  map[string]models.DataItemMetadata
 	axisDataItemLinks    map[string]models.AxisDataItemLink
 	spindleDataItemLinks map[string]models.SpindleDataItemLink
-	metadataMutex        sync.RWMutex // Один мьютекс для защиты всех метаданных.
+	metadataMutex        sync.RWMutex
 }
 
-// NewPollingManager - обновленный конструктор без in-memory репозитория.
+// NewPollingManager - конструктор Polling
 func NewPollingManager(dbRepo interfaces.CncMachineRepository, producer interfaces.KafkaService, logger *logging.Logger) *PollingManager {
 	return &PollingManager{
 		dbRepo:               dbRepo,
@@ -132,7 +132,7 @@ func (s *PollingManager) LoadMetadataForEndpoint(endpointURL string) error {
 	return nil
 }
 
-// processSingleEndpoint получает данные, парсит их и отправляет в Kafka, не сохраняя в памяти.
+// processSingleEndpoint получает данные, парсит их и отправляет в Kafka
 func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachineID string) {
 	xmlData, err := client.FetchXML(endpointURL)
 	if err != nil {
@@ -152,7 +152,6 @@ func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachine
 
 	for _, machineData := range machineDataSlice {
 		if machineData.MachineId == targetMachineID {
-			// Данные больше не сохраняются в локальном хранилище (s.repo.Set).
 
 			jsonData, err := json.Marshal(machineData)
 			if err != nil {
