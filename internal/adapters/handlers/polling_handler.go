@@ -37,8 +37,8 @@ func (h *Handler) StartPolling(c *gin.Context) {
 
 	h.logger.Info("Polling started successfully", "sessionID", req.SessionID)
 	c.JSON(http.StatusOK, gin.H{
-		"Status":  "ok",
-		"Message": fmt.Sprintf("Polling started for session %s", req.SessionID),
+		"status":  "ok",
+		"message": fmt.Sprintf("Polling started for session %s", req.SessionID),
 	})
 }
 
@@ -69,7 +69,7 @@ func (h *Handler) StopPolling(c *gin.Context) {
 
 	h.logger.Info("Polling stopped successfully", "sessionID", req.SessionID)
 	c.JSON(http.StatusOK, gin.H{
-		"Status":  "ok",
-		"Message": fmt.Sprintf("Polling stopped for session %s", req.SessionID),
+		"status":  "ok",
+		"message": fmt.Sprintf("Polling stopped for session %s", req.SessionID),
 	})
 }

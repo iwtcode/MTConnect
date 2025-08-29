@@ -34,7 +34,7 @@ func (h *Handler) CreateConnection(c *gin.Context) {
 	}
 
 	h.logger.Info("Successfully created connection", "sessionID", connInfo.SessionID)
-	c.JSON(http.StatusOK, gin.H{"Status": "ok", "connectionInfo": connInfo})
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "connection_info": connInfo})
 }
 
 // GetConnections возвращает список всех активных подключений.
@@ -47,9 +47,9 @@ func (h *Handler) CreateConnection(c *gin.Context) {
 func (h *Handler) GetConnections(c *gin.Context) {
 	connections := h.usecase.GetAllConnections()
 	c.JSON(http.StatusOK, gin.H{
-		"Status":      "ok",
-		"PoolSize":    len(connections),
-		"Connections": connections,
+		"status":      "ok",
+		"pool_size":   len(connections),
+		"connections": connections,
 	})
 }
 
@@ -80,8 +80,8 @@ func (h *Handler) DeleteConnection(c *gin.Context) {
 
 	h.logger.Info("Successfully deleted connection", "sessionID", req.SessionID)
 	c.JSON(http.StatusOK, gin.H{
-		"Status":  "ok",
-		"Message": "Session " + req.SessionID + " disconnected successfully",
+		"status":  "ok",
+		"message": "Session " + req.SessionID + " disconnected successfully",
 	})
 }
 
@@ -113,10 +113,10 @@ func (h *Handler) CheckConnection(c *gin.Context) {
 
 	// Если err не nil, значит соединение нездорово
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"Status": "unhealthy", "connectionInfo": connInfo})
+		c.JSON(http.StatusOK, gin.H{"status": "unhealthy", "connection_info": connInfo})
 		return
 	}
 
 	// В противном случае все хорошо
-	c.JSON(http.StatusOK, gin.H{"Status": "healthy", "connectionInfo": connInfo})
+	c.JSON(http.StatusOK, gin.H{"status": "healthy", "connection_info": connInfo})
 }

@@ -20,49 +20,49 @@ type SpindleInfo struct {
 
 // CurrentProgramInfo содержит информацию о текущей выполняемой программе
 type CurrentProgramInfo struct {
-	Block          string `json:"BLOCK,omitempty"`
-	Program        string `json:"PROGRAM,omitempty"`
-	ProgramComment string `json:"PROGRAM_COMMENT,omitempty"`
-	ProgramHeader  string `json:"PROGRAM_HEADER,omitempty"`
-	Line           string `json:"LINE,omitempty"`
-	LineNumber     string `json:"LINE_NUMBER,omitempty"`
-	LineLabel      string `json:"LINE_LABEL,omitempty"`
+	Block          string `json:"block,omitempty"`
+	Program        string `json:"program,omitempty"`
+	ProgramComment string `json:"program_comment,omitempty"`
+	ProgramHeader  string `json:"program_header,omitempty"`
+	Line           string `json:"line,omitempty"`
+	LineNumber     string `json:"line_number,omitempty"`
+	LineLabel      string `json:"line_label,omitempty"`
 }
 
 // MachineData - конечная модель данных для одного станка
 type MachineData struct {
-	MachineId           string                   `json:"MachineId"`
-	Id                  string                   `json:"Id"`
-	Timestamp           string                   `json:"Timestamp"`
-	IsEnabled           interface{}              `json:"IsEnabled"`
-	IsInEmergency       interface{}              `json:"IsInEmergency"`
-	MachineState        string                   `json:"MachineState"`
-	ProgramMode         string                   `json:"ProgramMode"`
-	TmMode              string                   `json:"TmMode"`
-	HandleRetraceStatus interface{}              `json:"HandleRetraceStatus"`
-	AxisMovementStatus  interface{}              `json:"AxisMovementStatus"`
-	MstbStatus          string                   `json:"MstbStatus"`
-	EmergencyStatus     string                   `json:"EmergencyStatus"`
-	AlarmStatus         string                   `json:"AlarmStatus"`
-	EditStatus          string                   `json:"EditStatus"`
-	ManualMode          interface{}              `json:"ManualMode"`
-	WriteStatus         string                   `json:"WriteStatus"`
-	LabelSkipStatus     interface{}              `json:"LabelSkipStatus"`
-	WarningStatus       string                   `json:"WarningStatus"`
-	BatteryStatus       interface{}              `json:"BatteryStatus"`
-	ActiveToolNumber    string                   `json:"activeToolNumber"`
-	ToolOffsetNumber    string                   `json:"toolOffsetNumber"`
-	AxisInfos           []AxisInfo               `json:"AxisInfos"`
-	FeedRate            map[string]string        `json:"FeedRate"`
-	FeedOverride        map[string]string        `json:"FeedOverride"`
-	Alarms              []map[string]interface{} `json:"Alarms"`
-	HasAlarms           interface{}              `json:"hasAlarms"`
-	PartsCount          map[string]string        `json:"PartsCount"`
-	AccumulatedTime     map[string]string        `json:"AccumulatedTime"`
-	CurrentProgram      *CurrentProgramInfo      `json:"CurrentProgram,omitempty"`
-	SpindleInfos        []SpindleInfo            `json:"SpindleInfos"`
-	ContourFeedRate     interface{}              `json:"ContourFeedRate"`
-	JogOverride         interface{}              `json:"JogOverride"`
+	MachineId           string                   `json:"machine_id"`
+	Id                  string                   `json:"id"`
+	Timestamp           string                   `json:"timestamp"`
+	IsEnabled           interface{}              `json:"is_enabled"`
+	IsInEmergency       interface{}              `json:"is_in_emergency"`
+	MachineState        string                   `json:"machine_state"`
+	ProgramMode         string                   `json:"program_mode"`
+	TmMode              string                   `json:"tm_mode"`
+	HandleRetraceStatus interface{}              `json:"handle_retrace_status"`
+	AxisMovementStatus  interface{}              `json:"axis_movement_status"`
+	MstbStatus          string                   `json:"mstb_status"`
+	EmergencyStatus     string                   `json:"emergency_status"`
+	AlarmStatus         string                   `json:"alarm_status"`
+	EditStatus          string                   `json:"edit_status"`
+	ManualMode          interface{}              `json:"manual_mode"`
+	WriteStatus         string                   `json:"write_status"`
+	LabelSkipStatus     interface{}              `json:"label_skip_status"`
+	WarningStatus       string                   `json:"warning_status"`
+	BatteryStatus       interface{}              `json:"battery_status"`
+	ActiveToolNumber    string                   `json:"active_tool_number"`
+	ToolOffsetNumber    string                   `json:"tool_offset_number"`
+	AxisInfos           []AxisInfo               `json:"axis_infos"`
+	FeedRate            map[string]string        `json:"feed_rate"`
+	FeedOverride        map[string]string        `json:"feed_override"`
+	Alarms              []map[string]interface{} `json:"alarms"`
+	HasAlarms           interface{}              `json:"has_alarms"`
+	PartsCount          map[string]string        `json:"parts_count"`
+	AccumulatedTime     map[string]string        `json:"accumulated_time"`
+	CurrentProgram      *CurrentProgramInfo      `json:"current_program,omitempty"`
+	SpindleInfos        []SpindleInfo            `json:"spindle_infos"`
+	ContourFeedRate     interface{}              `json:"contour_feed_rate"`
+	JogOverride         interface{}              `json:"jog_override"`
 }
 
 // DataItemMetadata хранит метаданные из /probe для каждого DataItem

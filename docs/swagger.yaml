@@ -2,61 +2,58 @@ basePath: /api/v1
 definitions:
   models.CheckConnectionResponse:
     properties:
-      Status:
+      connection_info:
+        $ref: '#/definitions/models.ConnectionInfo'
+      status:
         example: healthy
         type: string
-      connectionInfo:
-        $ref: '#/definitions/models.ConnectionInfo'
     type: object
   models.ConnectionConfig:
     properties:
-      EndpointURL:
+      endpoint_url:
         type: string
-      Manufacturer:
+      manufacturer:
         type: string
-      Model:
+      model:
         type: string
     type: object
   models.ConnectionInfo:
     properties:
-      Config:
+      config:
         $ref: '#/definitions/models.ConnectionConfig'
-      CreatedAt:
+      created_at:
         type: string
-      IsHealthy:
+      is_healthy:
         type: boolean
-      LastUsed:
+      last_used:
         type: string
-      SessionID:
+      session_id:
         type: string
-      UseCount:
+      use_count:
         type: integer
     type: object
   models.ConnectionRequest:
     properties:
-      EndpointURL:
+      endpoint_url:
         type: string
-      Manufacturer:
+      manufacturer:
         type: string
-      Model:
+      model:
         type: string
     required:
-    - EndpointURL
-    - Model
+    - endpoint_url
+    - model
     type: object
   models.CreateConnectionResponse:
     properties:
-      Status:
+      connection_info:
+        $ref: '#/definitions/models.ConnectionInfo'
+      status:
         example: ok
         type: string
-      connectionInfo:
-        $ref: '#/definitions/models.ConnectionInfo'
     type: object
   models.ErrorResponse:
     properties:
-      Status:
-        example: error
-        type: string
       error:
         properties:
           code:
@@ -66,46 +63,49 @@ definitions:
             example: Подключение не найдено
             type: string
         type: object
+      status:
+        example: error
+        type: string
     type: object
   models.GetConnectionsResponse:
     properties:
-      Connections:
+      connections:
         items:
           $ref: '#/definitions/models.ConnectionInfo'
         type: array
-      PoolSize:
+      pool_size:
         example: 2
         type: integer
-      Status:
+      status:
         example: ok
         type: string
     type: object
   models.MessageResponse:
     properties:
-      Message:
+      message:
         example: Polling started successfully
         type: string
-      Status:
+      status:
         example: ok
         type: string
     type: object
   models.PollingRequest:
     properties:
-      Interval:
+      interval:
         description: в миллисекундах
         type: integer
-      SessionID:
+      session_id:
         type: string
     required:
-    - Interval
-    - SessionID
+    - interval
+    - session_id
     type: object
   models.SessionRequest:
     properties:
-      SessionID:
+      session_id:
         type: string
     required:
-    - SessionID
+    - session_id
     type: object
 host: localhost:8080
 info:
@@ -201,15 +201,15 @@ paths:
       - application/json
       responses:
         "200":
-          description: Статус 'healthy'
+          description: Статус 'healthy' или 'unhealthy'
           schema:
             $ref: '#/definitions/models.CheckConnectionResponse'
         "400":
           description: Неверный формат запроса
           schema:
             $ref: '#/definitions/models.ErrorResponse'
-        "503":
-          description: Статус 'unhealthy'
+        "404":
+          description: Подключение не найдено
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Проверить состояние подключения

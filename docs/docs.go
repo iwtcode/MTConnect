@@ -149,7 +149,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Статус 'healthy'",
+                        "description": "Статус 'healthy' или 'unhealthy'",
                         "schema": {
                             "$ref": "#/definitions/models.CheckConnectionResponse"
                         }
@@ -160,8 +160,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
                     },
-                    "503": {
-                        "description": "Статус 'unhealthy'",
+                    "404": {
+                        "description": "Подключение не найдено",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
@@ -266,25 +266,25 @@ const docTemplate = `{
         "models.CheckConnectionResponse": {
             "type": "object",
             "properties": {
-                "Status": {
+                "connection_info": {
+                    "$ref": "#/definitions/models.ConnectionInfo"
+                },
+                "status": {
                     "type": "string",
                     "example": "healthy"
-                },
-                "connectionInfo": {
-                    "$ref": "#/definitions/models.ConnectionInfo"
                 }
             }
         },
         "models.ConnectionConfig": {
             "type": "object",
             "properties": {
-                "EndpointURL": {
+                "endpoint_url": {
                     "type": "string"
                 },
-                "Manufacturer": {
+                "manufacturer": {
                     "type": "string"
                 },
-                "Model": {
+                "model": {
                     "type": "string"
                 }
             }
@@ -292,22 +292,22 @@ const docTemplate = `{
         "models.ConnectionInfo": {
             "type": "object",
             "properties": {
-                "Config": {
+                "config": {
                     "$ref": "#/definitions/models.ConnectionConfig"
                 },
-                "CreatedAt": {
+                "created_at": {
                     "type": "string"
                 },
-                "IsHealthy": {
+                "is_healthy": {
                     "type": "boolean"
                 },
-                "LastUsed": {
+                "last_used": {
                     "type": "string"
                 },
-                "SessionID": {
+                "session_id": {
                     "type": "string"
                 },
-                "UseCount": {
+                "use_count": {
                     "type": "integer"
                 }
             }
@@ -315,17 +315,17 @@ const docTemplate = `{
         "models.ConnectionRequest": {
             "type": "object",
             "required": [
-                "EndpointURL",
-                "Model"
+                "endpoint_url",
+                "model"
             ],
             "properties": {
-                "EndpointURL": {
+                "endpoint_url": {
                     "type": "string"
                 },
-                "Manufacturer": {
+                "manufacturer": {
                     "type": "string"
                 },
-                "Model": {
+                "model": {
                     "type": "string"
                 }
             }
@@ -333,22 +333,18 @@ const docTemplate = `{
         "models.CreateConnectionResponse": {
             "type": "object",
             "properties": {
-                "Status": {
+                "connection_info": {
+                    "$ref": "#/definitions/models.ConnectionInfo"
+                },
+                "status": {
                     "type": "string",
                     "example": "ok"
-                },
-                "connectionInfo": {
-                    "$ref": "#/definitions/models.ConnectionInfo"
                 }
             }
         },
         "models.ErrorResponse": {
             "type": "object",
             "properties": {
-                "Status": {
-                    "type": "string",
-                    "example": "error"
-                },
                 "error": {
                     "type": "object",
                     "properties": {
@@ -361,23 +357,27 @@ const docTemplate = `{
                             "example": "Подключение не найдено"
                         }
                     }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "error"
                 }
             }
         },
         "models.GetConnectionsResponse": {
             "type": "object",
             "properties": {
-                "Connections": {
+                "connections": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.ConnectionInfo"
                     }
                 },
-                "PoolSize": {
+                "pool_size": {
                     "type": "integer",
                     "example": 2
                 },
-                "Status": {
+                "status": {
                     "type": "string",
                     "example": "ok"
                 }
@@ -386,11 +386,11 @@ const docTemplate = `{
         "models.MessageResponse": {
             "type": "object",
             "properties": {
-                "Message": {
+                "message": {
                     "type": "string",
                     "example": "Polling started successfully"
                 },
-                "Status": {
+                "status": {
                     "type": "string",
                     "example": "ok"
                 }
@@ -399,15 +399,15 @@ const docTemplate = `{
         "models.PollingRequest": {
             "type": "object",
             "required": [
-                "Interval",
-                "SessionID"
+                "interval",
+                "session_id"
             ],
             "properties": {
-                "Interval": {
+                "interval": {
                     "description": "в миллисекундах",
                     "type": "integer"
                 },
-                "SessionID": {
+                "session_id": {
                     "type": "string"
                 }
             }
@@ -415,10 +415,10 @@ const docTemplate = `{
         "models.SessionRequest": {
             "type": "object",
             "required": [
-                "SessionID"
+                "session_id"
             ],
             "properties": {
-                "SessionID": {
+                "session_id": {
                     "type": "string"
                 }
             }
