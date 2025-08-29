@@ -10,25 +10,28 @@ import (
 	"strings"
 )
 
-// ClientService обрабатывает низкоуровневое HTTP-взаимодействие.
+// ClientService предоставляет базовый функционал для работы с HTTP API.
 type ClientService struct {
 	HTTPClient *http.Client
 	Host       string
 }
 
-// NewClientService создает новый сервис для клиента.
+// NewClientService создает новый экземпляр ClientService.
 func NewClientService(host string) *ClientService {
+	// Убираем возможный слэш в конце хоста для унификации
 	host = strings.TrimSuffix(host, "/")
+
 	return &ClientService{
 		HTTPClient: &http.Client{},
 		Host:       host,
 	}
 }
 
-// createRequestJSON создает HTTP-запрос с JSON-заголовками.
-func (s *ClientService) createRequestJSON(ctx context.Context, httpMethod, urlPath string, queryParams map[string]string, reqBody io.Reader) (*http.Request, error) {
-	processedUrlPath := strings.TrimPrefix(urlPath, "/")
-	fullURL := fmt.Sprintf("%s/api/v1/%s", s.Host, processedUrlPath)
+// createRequestJSONWithContext создает HTTP-запрос с заголовком application/json.
+func (s *ClientService) createRequestJSONWithContext(ctx context.Context, httpMethod, urlPath string, queryParams map[string]string, reqBody io.Reader) (*http.Request, error) {
+	// Убираем возможный слэш в начале пути
+	urlPath = strings.TrimPrefix(urlPath, "/")
+	fullURL := fmt.Sprintf("%s/%s", s.Host, urlPath)
 
 	if len(queryParams) > 0 {
 		params := url.Values{}
@@ -44,12 +47,10 @@ func (s *ClientService) createRequestJSON(ctx context.Context, httpMethod, urlPa
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
 	return req, nil
 }
 
-// doRequest отправляет запрос и возвращает тело ответа, полную структуру ответа или ошибку.
+// doRequest выполняет HTTP-запрос и возвращает тело ответа.
 func (s *ClientService) doRequest(req *http.Request) ([]byte, *http.Response, error) {
 	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
@@ -62,11 +63,11 @@ func (s *ClientService) doRequest(req *http.Request) ([]byte, *http.Response, er
 		return nil, resp, err
 	}
 
-	// Создаем новый reader для тела ответа, чтобы его можно было прочитать снова при необходимости.
+	// Восстанавливаем Body, чтобы его можно было прочитать снова, если потребуется
 	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return bodyBytes, resp, fmt.Errorf("запрос завершился с кодом состояния %d: %s", resp.StatusCode, string(bodyBytes))
+	if resp.StatusCode != http.StatusOK {
+		return bodyBytes, resp, fmt.Errorf("ошибка ответа сервера: статус %d, тело: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return bodyBytes, resp, nil

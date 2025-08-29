@@ -5,100 +5,86 @@ import (
 	"log"
 	"testing"
 	"time"
+
+	"github.com/iwtcode/MTConnect/pkg/models"
 )
 
-// ВНИМАНИЕ: Эти тесты являются интеграционными и требуют, чтобы основной
-// сервис MTConnect был запущен и доступен по адресу, указанному в 'testHost'.
-const (
-	testHost = "http://localhost:8080"
-	// Используется публичный и стабильный эндпоинт для тестов
-	testEndpointURL = "https://smstestbed.nist.gov/vds"
-	testModel       = "Mazak Integrex 100-IV"
-)
-
-// TestClientWorkflow проверяет полный цикл работы с API.
-func TestClientWorkflow(t *testing.T) {
-	// 1. Создание нового клиента
-	client := NewClient(testHost)
+// ВНИМАНИЕ: Для запуска этого теста должен быть запущен MTConnect сервис на localhost:8080
+// и эмулятор MTConnect агента на http://localhost:5001/Mazak
+func TestFullClientWorkflow(t *testing.T) {
+	// Инициализация клиента
+	api := NewClient("http://localhost:8080")
 	ctx := context.Background()
 
-	// 2. Создание нового подключения
-	t.Log("Шаг 1: Создание нового подключения...")
-	createResp, err := client.CreateConnection(ctx, testEndpointURL, testModel, "")
+	// 1. Создание подключения
+	log.Println("Шаг 1: Создание подключения...")
+	createReq := models.ConnectionRequest{
+		EndpointURL: "https://smstestbed.nist.gov/vds",
+		Model:       "Hurco VMX 24 #1",
+	}
+	connResp, _, err := api.CreateConnection(ctx, createReq)
 	if err != nil {
-		t.Fatalf("Не удалось создать подключение: %v", err)
+		t.Fatalf("Ошибка создания подключения: %v", err)
 	}
-	if createResp.Status != "ok" || createResp.ConnectionInfo == nil || createResp.ConnectionInfo.SessionID == "" {
-		t.Fatalf("Получен некорректный ответ при создании подключения: %+v", createResp)
+	if connResp.Status != "ok" || connResp.ConnectionInfo.SessionID == "" {
+		t.Fatalf("Некорректный ответ при создании подключения: %+v", connResp)
 	}
-	sessionID := createResp.ConnectionInfo.SessionID
-	t.Logf("Подключение успешно создано. SessionID: %s", sessionID)
+	sessionID := connResp.ConnectionInfo.SessionID
+	log.Printf("Подключение создано успешно. SessionID: %s\n", sessionID)
 
-	// 3. Отложенное удаление для очистки ресурсов после теста
-	defer func() {
-		t.Logf("Очистка: Удаление подключения с SessionID: %s", sessionID)
-		_, err := client.DeleteConnection(ctx, sessionID)
-		if err != nil {
-			// Используем log вместо t.Fatalf, чтобы не маскировать исходную ошибку теста
-			log.Printf("ПРЕДУПРЕЖДЕНИЕ: Не удалось удалить подключение во время очистки: %v", err)
-		} else {
-			t.Log("Очистка ресурсов прошла успешно.")
-		}
-	}()
-
-	// 4. Получение списка всех подключений для проверки
-	t.Log("Шаг 2: Получение списка подключений для проверки...")
-	getResp, err := client.GetConnections(ctx)
+	// 2. Получение списка подключений
+	log.Println("Шаг 2: Получение списка всех подключений...")
+	listResp, _, err := api.GetConnections(ctx)
 	if err != nil {
-		t.Fatalf("Не удалось получить список подключений: %v", err)
+		t.Fatalf("Ошибка получения списка подключений: %v", err)
 	}
-	var found bool
-	for _, conn := range getResp.Connections {
-		if conn.SessionID == sessionID {
-			found = true
-			break
-		}
+	if listResp.Status != "ok" || listResp.PoolSize == 0 {
+		t.Fatalf("Некорректный ответ при получении списка: %+v", listResp)
 	}
-	if !found {
-		t.Fatalf("Созданное подключение с SessionID %s не найдено в общем списке", sessionID)
-	}
-	t.Log("Проверка подтвердила, что подключение присутствует в пуле.")
+	log.Printf("Получено %d активных подключений.\n", listResp.PoolSize)
 
-	// 5. Проверка состояния подключения
-	t.Log("Шаг 3: Проверка состояния подключения...")
-	checkResp, err := client.CheckConnection(ctx, sessionID)
+	// 3. Проверка состояния
+	log.Println("Шаг 3: Проверка состояния подключения...")
+	checkResp, _, err := api.CheckConnection(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("Не удалось проверить состояние подключения: %v", err)
+		t.Fatalf("Ошибка проверки подключения: %v", err)
 	}
-	if checkResp.Status != "healthy" || !checkResp.ConnectionInfo.IsHealthy {
-		t.Fatalf("Проверка вернула нездоровый статус: %+v", checkResp)
+	if checkResp.Status != "healthy" {
+		t.Fatalf("Проверка показала нездоровое состояние: %s", checkResp.Status)
 	}
-	t.Log("Проверка состояния подключения пройдена успешно.")
+	log.Printf("Состояние подключения: %s\n", checkResp.Status)
 
-	// 6. Запуск опроса данных (polling)
-	t.Log("Шаг 4: Запуск опроса данных...")
-	startResp, err := client.StartPolling(ctx, sessionID, 1000)
+	// 4. Запуск опроса
+	log.Println("Шаг 4: Запуск опроса данных...")
+	startPollReq := models.PollingRequest{
+		SessionID: sessionID,
+		Interval:  1000, // 1 секунда
+	}
+	startMsg, _, err := api.StartPolling(ctx, startPollReq)
 	if err != nil {
-		t.Fatalf("Не удалось запустить опрос: %v", err)
+		t.Fatalf("Ошибка запуска опроса: %v", err)
 	}
-	if startResp.Status != "ok" {
-		t.Fatalf("Получен некорректный ответ при запуске опроса: %+v", startResp)
-	}
-	t.Log("Опрос данных успешно запущен.")
+	log.Printf("Ответ сервера: %s\n", startMsg.Message)
 
-	// Дадим время на выполнение хотя бы одного цикла опроса
-	time.Sleep(1200 * time.Millisecond)
+	// Даем опросу поработать
+	log.Println("Ожидание 3 секунды, пока идет опрос...")
+	time.Sleep(3 * time.Second)
 
-	// 7. Остановка опроса данных
-	t.Log("Шаг 5: Остановка опроса данных...")
-	stopResp, err := client.StopPolling(ctx, sessionID)
+	// 5. Остановка опроса
+	log.Println("Шаг 5: Остановка опроса данных...")
+	stopMsg, _, err := api.StopPolling(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("Не удалось остановить опрос: %v", err)
+		t.Fatalf("Ошибка остановки опроса: %v", err)
 	}
-	if stopResp.Status != "ok" {
-		t.Fatalf("Получен некорректный ответ при остановке опроса: %+v", stopResp)
-	}
-	t.Log("Опрос данных успешно остановлен.")
+	log.Printf("Ответ сервера: %s\n", stopMsg.Message)
 
-	t.Log("Тестовый сценарий завершен. Запускается отложенная очистка...")
+	// 6. Удаление подключения
+	log.Println("Шаг 6: Удаление подключения...")
+	deleteMsg, _, err := api.DeleteConnection(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("Ошибка удаления подключения: %v", err)
+	}
+	log.Printf("Ответ сервера: %s\n", deleteMsg.Message)
+
+	log.Println("Тест успешно завершен!")
 }

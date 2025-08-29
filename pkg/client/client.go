@@ -6,169 +6,189 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	// Важно: импортируем модели из нового публичного пакета
+	"github.com/iwtcode/MTConnect/pkg/models"
 )
 
-// ClientAPI определяет интерфейс для клиента сервиса MTConnect.
+// ClientAPI определяет интерфейс для взаимодействия с MTConnect Service API.
 type ClientAPI interface {
-	// CreateConnection создает новое подключение к эндпоинту MTConnect.
-	CreateConnection(ctx context.Context, endpointURL, model, manufacturer string) (*CreateConnectionResponse, error)
-	// GetConnections возвращает список всех активных подключений.
-	GetConnections(ctx context.Context) (*GetConnectionsResponse, error)
-	// DeleteConnection удаляет подключение по его SessionID.
-	DeleteConnection(ctx context.Context, sessionID string) (*MessageResponse, error)
-	// CheckConnection проверяет состояние подключения по его SessionID.
-	CheckConnection(ctx context.Context, sessionID string) (*CheckConnectionResponse, error)
-	// StartPolling запускает сбор данных для указанного подключения.
-	StartPolling(ctx context.Context, sessionID string, interval int) (*MessageResponse, error)
-	// StopPolling останавливает сбор данных для указанного подключения.
-	StopPolling(ctx context.Context, sessionID string) (*MessageResponse, error)
+	// Управление подключениями
+	CreateConnection(ctx context.Context, req models.ConnectionRequest) (*models.CreateConnectionResponse, *http.Response, error)
+	GetConnections(ctx context.Context) (*models.GetConnectionsResponse, *http.Response, error)
+	DeleteConnection(ctx context.Context, sessionID string) (*models.MessageResponse, *http.Response, error)
+	CheckConnection(ctx context.Context, sessionID string) (*models.CheckConnectionResponse, *http.Response, error)
+
+	// Управление опросом
+	StartPolling(ctx context.Context, req models.PollingRequest) (*models.MessageResponse, *http.Response, error)
+	StopPolling(ctx context.Context, sessionID string) (*models.MessageResponse, *http.Response, error)
 }
 
-// Client является конкретной реализацией ClientAPI.
+// Client реализует интерфейс ClientAPI.
 type Client struct {
 	service *ClientService
 }
 
-// NewClient создает новый клиент MTConnect.
+// NewClient создает новый клиент для MTConnect Service API.
 func NewClient(host string) ClientAPI {
 	return &Client{
 		service: NewClientService(host),
 	}
 }
 
-// unmarshalResponse — это вспомогательная функция для декодирования JSON-ответов и обработки ошибок.
-func unmarshalResponse[T any](body []byte) (*T, error) {
-	// Сначала пытаемся десериализовать в обобщенный ответ об ошибке.
-	var genericResp map[string]interface{}
-	if err := json.Unmarshal(body, &genericResp); err == nil {
-		if status, ok := genericResp["status"].(string); ok && status == "error" {
-			var errResp ErrorResponse
-			if err := json.Unmarshal(body, &errResp); err == nil {
-				return nil, fmt.Errorf("ошибка API: %s (код: %d)", errResp.Error.Message, errResp.Error.Code)
-			}
-		}
+// CreateConnection создает новое подключение к MTConnect эндпоинту.
+func (c *Client) CreateConnection(ctx context.Context, req models.ConnectionRequest) (*models.CreateConnectionResponse, *http.Response, error) {
+	const endpoint = "/api/v1/connect"
+
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("ошибка сериализации запроса: %w", err)
 	}
 
-	// Если ошибки нет, десериализуем в целевой тип.
-	var target T
-	if err := json.Unmarshal(body, &target); err != nil {
-		return nil, fmt.Errorf("не удалось десериализовать успешный ответ: %w", err)
+	httpReq, err := c.service.createRequestJSONWithContext(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, nil, err
 	}
-	return &target, nil
+
+	body, httpResp, err := c.service.doRequest(httpReq)
+	if err != nil {
+		return nil, httpResp, err
+	}
+
+	var resp models.CreateConnectionResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, httpResp, fmt.Errorf("ошибка десериализации ответа: %w", err)
+	}
+
+	return &resp, httpResp, nil
 }
 
-func (c *Client) CreateConnection(ctx context.Context, endpointURL, model, manufacturer string) (*CreateConnectionResponse, error) {
-	const endpoint = "connect"
-	reqBody, err := json.Marshal(ConnectionRequest{
-		EndpointURL:  endpointURL,
-		Model:        model,
-		Manufacturer: manufacturer,
-	})
+// GetConnections возвращает список всех активных подключений.
+func (c *Client) GetConnections(ctx context.Context) (*models.GetConnectionsResponse, *http.Response, error) {
+	const endpoint = "/api/v1/connect"
+
+	httpReq, err := c.service.createRequestJSONWithContext(ctx, http.MethodGet, endpoint, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось сериализовать тело запроса: %w", err)
+		return nil, nil, err
 	}
 
-	req, err := c.service.createRequestJSON(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
+	body, httpResp, err := c.service.doRequest(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+		return nil, httpResp, err
 	}
 
-	body, _, err := c.service.doRequest(req)
-	if err != nil {
-		return nil, err
+	var resp models.GetConnectionsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, httpResp, fmt.Errorf("ошибка десериализации ответа: %w", err)
 	}
-	return unmarshalResponse[CreateConnectionResponse](body)
+
+	return &resp, httpResp, nil
 }
 
-func (c *Client) GetConnections(ctx context.Context) (*GetConnectionsResponse, error) {
-	const endpoint = "connect"
-	req, err := c.service.createRequestJSON(ctx, http.MethodGet, endpoint, nil, nil)
+// DeleteConnection удаляет подключение по SessionID.
+func (c *Client) DeleteConnection(ctx context.Context, sessionID string) (*models.MessageResponse, *http.Response, error) {
+	const endpoint = "/api/v1/connect"
+
+	reqBody, err := json.Marshal(models.SessionRequest{SessionID: sessionID})
 	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+		return nil, nil, fmt.Errorf("ошибка сериализации запроса: %w", err)
 	}
 
-	body, _, err := c.service.doRequest(req)
+	httpReq, err := c.service.createRequestJSONWithContext(ctx, http.MethodDelete, endpoint, nil, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return unmarshalResponse[GetConnectionsResponse](body)
+
+	body, httpResp, err := c.service.doRequest(httpReq)
+	if err != nil {
+		return nil, httpResp, err
+	}
+
+	var resp models.MessageResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, httpResp, fmt.Errorf("ошибка десериализации ответа: %w", err)
+	}
+
+	return &resp, httpResp, nil
 }
 
-func (c *Client) DeleteConnection(ctx context.Context, sessionID string) (*MessageResponse, error) {
-	const endpoint = "connect"
-	reqBody, err := json.Marshal(SessionRequest{SessionID: sessionID})
+// CheckConnection проверяет состояние подключения по SessionID.
+func (c *Client) CheckConnection(ctx context.Context, sessionID string) (*models.CheckConnectionResponse, *http.Response, error) {
+	const endpoint = "/api/v1/connect/check"
+
+	reqBody, err := json.Marshal(models.SessionRequest{SessionID: sessionID})
 	if err != nil {
-		return nil, fmt.Errorf("не удалось сериализовать тело запроса: %w", err)
+		return nil, nil, fmt.Errorf("ошибка сериализации запроса: %w", err)
 	}
 
-	req, err := c.service.createRequestJSON(ctx, http.MethodDelete, endpoint, nil, bytes.NewBuffer(reqBody))
+	httpReq, err := c.service.createRequestJSONWithContext(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+		return nil, nil, err
 	}
 
-	body, _, err := c.service.doRequest(req)
+	body, httpResp, err := c.service.doRequest(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, httpResp, err
 	}
-	return unmarshalResponse[MessageResponse](body)
+
+	var resp models.CheckConnectionResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, httpResp, fmt.Errorf("ошибка десериализации ответа: %w", err)
+	}
+
+	return &resp, httpResp, nil
 }
 
-func (c *Client) CheckConnection(ctx context.Context, sessionID string) (*CheckConnectionResponse, error) {
-	const endpoint = "connect/check"
-	reqBody, err := json.Marshal(SessionRequest{SessionID: sessionID})
+// StartPolling запускает опрос данных для указанного подключения.
+func (c *Client) StartPolling(ctx context.Context, req models.PollingRequest) (*models.MessageResponse, *http.Response, error) {
+	const endpoint = "/api/v1/polling/start"
+
+	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось сериализовать тело запроса: %w", err)
+		return nil, nil, fmt.Errorf("ошибка сериализации запроса: %w", err)
 	}
 
-	req, err := c.service.createRequestJSON(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
+	httpReq, err := c.service.createRequestJSONWithContext(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+		return nil, nil, err
 	}
 
-	body, _, err := c.service.doRequest(req)
+	body, httpResp, err := c.service.doRequest(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, httpResp, err
 	}
-	return unmarshalResponse[CheckConnectionResponse](body)
+
+	var resp models.MessageResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, httpResp, fmt.Errorf("ошибка десериализации ответа: %w", err)
+	}
+
+	return &resp, httpResp, nil
 }
 
-func (c *Client) StartPolling(ctx context.Context, sessionID string, interval int) (*MessageResponse, error) {
-	const endpoint = "polling/start"
-	reqBody, err := json.Marshal(PollingRequest{
-		SessionID: sessionID,
-		Interval:  interval,
-	})
+// StopPolling останавливает опрос данных для указанного подключения.
+func (c *Client) StopPolling(ctx context.Context, sessionID string) (*models.MessageResponse, *http.Response, error) {
+	const endpoint = "/api/v1/polling/stop"
+
+	reqBody, err := json.Marshal(models.SessionRequest{SessionID: sessionID})
 	if err != nil {
-		return nil, fmt.Errorf("не удалось сериализовать тело запроса: %w", err)
+		return nil, nil, fmt.Errorf("ошибка сериализации запроса: %w", err)
 	}
 
-	req, err := c.service.createRequestJSON(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
+	httpReq, err := c.service.createRequestJSONWithContext(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+		return nil, nil, err
 	}
 
-	body, _, err := c.service.doRequest(req)
+	body, httpResp, err := c.service.doRequest(httpReq)
 	if err != nil {
-		return nil, err
-	}
-	return unmarshalResponse[MessageResponse](body)
-}
-
-func (c *Client) StopPolling(ctx context.Context, sessionID string) (*MessageResponse, error) {
-	const endpoint = "polling/stop"
-	reqBody, err := json.Marshal(SessionRequest{SessionID: sessionID})
-	if err != nil {
-		return nil, fmt.Errorf("не удалось сериализовать тело запроса: %w", err)
+		return nil, httpResp, err
 	}
 
-	req, err := c.service.createRequestJSON(ctx, http.MethodPost, endpoint, nil, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("не удалось создать запрос: %w", err)
+	var resp models.MessageResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, httpResp, fmt.Errorf("ошибка десериализации ответа: %w", err)
 	}
 
-	body, _, err := c.service.doRequest(req)
-	if err != nil {
-		return nil, err
-	}
-	return unmarshalResponse[MessageResponse](body)
+	return &resp, httpResp, nil
 }
