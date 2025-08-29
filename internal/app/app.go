@@ -2,7 +2,6 @@ package app
 
 import (
 	"MTConnect/internal/adapters/handlers"
-	"MTConnect/internal/adapters/repositories/datastore"
 	"MTConnect/internal/adapters/repositories/postgres"
 	"MTConnect/internal/config"
 	"MTConnect/internal/domain/entities"
@@ -57,16 +56,8 @@ var LoggingModule = fx.Module("logging_module",
 
 var RepositoryModule = fx.Module("repository_module",
 	fx.Provide(
-		datastore.NewDataStore,
 		postgres.NewRepository,
 	),
-	fx.Provide(func(ds interfaces.DataStoreRepository, cncRepo interfaces.CncMachineRepository) interfaces.Repository {
-		type repositoryImpl struct {
-			interfaces.DataStoreRepository
-			interfaces.CncMachineRepository
-		}
-		return repositoryImpl{ds, cncRepo}
-	}),
 )
 
 var ProducerModule = fx.Module("producer_module",

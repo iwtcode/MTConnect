@@ -15,7 +15,7 @@ type mtconnectService struct {
 	pollMgr *poller.PollingManager
 }
 
-func NewMTConnectService(repo interfaces.Repository, producer interfaces.KafkaService, logger *logging.Logger) interfaces.MTConnectService {
+func NewMTConnectService(repo interfaces.CncMachineRepository, producer interfaces.KafkaService, logger *logging.Logger) interfaces.MTConnectService {
 	pollingManager := poller.NewPollingManager(repo, producer, logger)
 	connectionManager := connector.NewConnectionManager(pollingManager, repo, logger)
 
