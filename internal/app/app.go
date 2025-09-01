@@ -211,16 +211,6 @@ func InvokeGracefulShutdown(lc fx.Lifecycle, mtconnectSvc interfaces.MTConnectSe
 		OnStop: func(ctx context.Context) error {
 			logger.Info("Gracefully shutting down services...")
 
-			connections := mtconnectSvc.GetAllConnections()
-			for _, conn := range connections {
-				if mtconnectSvc.IsPollingActive(conn.SessionID) {
-					logger.Info("Stopping polling on shutdown", "sessionID", conn.SessionID)
-					if err := mtconnectSvc.StopPolling(conn.SessionID); err != nil {
-						logger.Error("Error stopping polling", "sessionID", conn.SessionID, "error", err)
-					}
-				}
-			}
-
 			if err := producer.Close(); err != nil {
 				logger.Error("Error closing Kafka producer", "error", err)
 			}
