@@ -76,9 +76,29 @@ LOGGER_LOG_LEVEL=DEBUG
 LOGGER_SAVING_DAYS=7
 ```
 
-3️⃣ **Запуск Apache Kafka**
+3️⃣ **Установка cppagent**
+```bash
+https://github.com/mtconnect/cppagent/releases/tag/v2.5.0.11
+```
+
+4️⃣ **Запуск симуляторов станков**
+
+Скопируйте файл `pkg\agent\random_simulator.rb` в `agent-2.5.0.11-win64\simulator`
+```bash
+cd agent-2.5.0.11-win64\simulator
+ruby random_simulator.rb
+```
+
+5️⃣ **Запуск MTConnect agent**
+```bash
+cd agent-2.5.0.11-win64\bin
+agent.exe debug ..\demo\agent\agent.cfg
+```
+
+6️⃣ **Запуск Apache Kafka**
 
 ```bash
+cd MTConnect
 docker-compose up
 ```
 
@@ -87,7 +107,7 @@ docker-compose up
 Либо просмотреть сообщения сервера можно в реальном времени командой:<br>
 `docker-compose exec kafka kafka-console-consumer --bootstrap-server localhost:9092 --topic mtconnect_data`
 
-4️⃣ **Запуск приложения**
+7️⃣ **Запуск приложения**
 
 ```
 # Windows
@@ -96,8 +116,11 @@ docker-compose up
 # Linux
 ./build/linux_mtc
 
-# macOS
+# MacOS
 ./build/macos_mtc
+
+# Golang
+go run cmd/app/main.go
 ```
 
 ## 🔌 API
