@@ -34,10 +34,6 @@ func (s *mtconnectService) CreateConnection(req models.ConnectionRequest) (*mode
 		return nil, err
 	}
 
-	if err := s.pollMgr.LoadMetadataForEndpoint(connInfo.Config.EndpointURL); err != nil {
-		s.logger.Warn("Could not load metadata for new connection, polling data may be incomplete", "sessionID", connInfo.SessionID, "error", err)
-	}
-
 	return connInfo, nil
 }
 
@@ -45,10 +41,6 @@ func (s *mtconnectService) RestoreConnection(machine entities.CncMachine) (*mode
 	connInfo, err := s.connMgr.RestoreConnection(machine)
 	if err != nil {
 		return nil, err
-	}
-
-	if err := s.pollMgr.LoadMetadataForEndpoint(connInfo.Config.EndpointURL); err != nil {
-		s.logger.Warn("Could not load metadata for restored connection, polling data may be incomplete", "sessionID", connInfo.SessionID, "error", err)
 	}
 
 	return connInfo, nil

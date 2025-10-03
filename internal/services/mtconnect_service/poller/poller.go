@@ -22,29 +22,31 @@ type activePoll struct {
 	done   chan bool
 }
 
+// MetadataStore хранит все метаданные для одного эндпоинта.
+type MetadataStore struct {
+	DeviceMetadata map[string]models.DataItemMetadata
+	AxisLinks      map[string]models.AxisDataItemLink
+	SpindleLinks   map[string]models.SpindleDataItemLink
+}
+
 // PollingManager - упрощенная структура, сфокусированная на опросе и отправке данных.
 type PollingManager struct {
-	dbRepo               interfaces.CncMachineRepository
-	producer             interfaces.KafkaService
-	logger               *logging.Logger
-	activePolls          map[string]*activePoll
-	pollsMutex           sync.Mutex
-	deviceMetadataStore  map[string]models.DataItemMetadata
-	axisDataItemLinks    map[string]models.AxisDataItemLink
-	spindleDataItemLinks map[string]models.SpindleDataItemLink
-	metadataMutex        sync.RWMutex
+	dbRepo         interfaces.CncMachineRepository
+	producer       interfaces.KafkaService
+	logger         *logging.Logger
+	activePolls    map[string]*activePoll
+	pollsMutex     sync.Mutex
+	metadataStores map[string]*MetadataStore
 }
 
 // NewPollingManager - конструктор Polling
 func NewPollingManager(dbRepo interfaces.CncMachineRepository, producer interfaces.KafkaService, logger *logging.Logger) *PollingManager {
 	return &PollingManager{
-		dbRepo:               dbRepo,
-		producer:             producer,
-		logger:               logger.WithPrefix("POLLER"),
-		activePolls:          make(map[string]*activePoll),
-		deviceMetadataStore:  make(map[string]models.DataItemMetadata),
-		axisDataItemLinks:    make(map[string]models.AxisDataItemLink),
-		spindleDataItemLinks: make(map[string]models.SpindleDataItemLink),
+		dbRepo:         dbRepo,
+		producer:       producer,
+		logger:         logger.WithPrefix("POLLER"),
+		activePolls:    make(map[string]*activePoll),
+		metadataStores: make(map[string]*MetadataStore),
 	}
 }
 
@@ -63,6 +65,22 @@ func (s *PollingManager) StartPolling(conn *models.ConnectionInfo, interval time
 
 	if _, exists := s.activePolls[sessionID]; exists {
 		return fmt.Errorf("опрос для сессии '%s' уже запущен", sessionID)
+	}
+
+	// Загружаем метаданные для этой сессии при первом запуске опроса.
+	// Это происходит один раз и защищено мьютексом.
+	if _, exists := s.metadataStores[sessionID]; !exists {
+		store, err := s.fetchAndParseProbe(conn.Config.EndpointURL)
+		if err != nil {
+			s.logger.Error("Failed to load metadata, polling will not start", "endpoint", conn.Config.EndpointURL, "error", err)
+			return fmt.Errorf("не удалось загрузить метаданные для эндпоинта: %w", err)
+		}
+		s.metadataStores[sessionID] = store
+		s.logger.Info("Successfully loaded metadata for session",
+			"sessionID", sessionID,
+			"dataItems", len(store.DeviceMetadata),
+			"axisLinks", len(store.AxisLinks),
+			"spindleLinks", len(store.SpindleLinks))
 	}
 
 	if err := s.dbRepo.UpdatePollingState(sessionID, entities.StatusPolled, int(interval.Milliseconds())); err != nil {
@@ -92,6 +110,8 @@ func (s *PollingManager) StopPolling(sessionID string) error {
 	poll.done <- true
 	close(poll.done)
 	delete(s.activePolls, sessionID)
+	// Удаляем метаданные, связанные с этой сессией
+	delete(s.metadataStores, sessionID)
 
 	return nil
 }
@@ -105,21 +125,8 @@ func (s *PollingManager) CheckMachineConnection(endpointURL string) error {
 	return nil
 }
 
-func (s *PollingManager) LoadMetadataForEndpoint(endpointURL string) error {
-	if err := s.fetchAndParseProbe(endpointURL); err != nil {
-		s.logger.Warn("Some data may not be recognized.", "error", err)
-		return err
-	}
-	s.logger.Info("Loaded DataItem metadata",
-		"dataItems", len(s.deviceMetadataStore),
-		"axisLinks", len(s.axisDataItemLinks),
-		"spindleLinks", len(s.spindleDataItemLinks),
-	)
-	return nil
-}
-
 // processSingleEndpoint получает данные, парсит их и отправляет в Kafka
-func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachineID string) {
+func (s *PollingManager) processSingleEndpoint(sessionID string, endpointURL string, targetMachineID string) {
 	xmlData, err := client.FetchXML(endpointURL)
 	if err != nil {
 		s.logger.Error("Error fetching XML", "url", endpointURL, "error", err)
@@ -132,9 +139,14 @@ func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachine
 		return
 	}
 
-	s.metadataMutex.RLock()
-	machineDataSlice := parser.MapToMachineData(&streams, s.deviceMetadataStore, s.axisDataItemLinks, s.spindleDataItemLinks)
-	s.metadataMutex.RUnlock()
+	store, exists := s.metadataStores[sessionID]
+
+	if !exists {
+		s.logger.Error("Metadata store not found for a running poll", "sessionID", sessionID)
+		return
+	}
+
+	machineDataSlice := parser.MapToMachineData(&streams, store.DeviceMetadata, store.AxisLinks, store.SpindleLinks)
 
 	for _, machineData := range machineDataSlice {
 		if machineData.MachineId == targetMachineID {
@@ -153,18 +165,24 @@ func (s *PollingManager) processSingleEndpoint(endpointURL string, targetMachine
 	}
 }
 
-func (s *PollingManager) fetchAndParseProbe(endpointURL string) error {
+func (s *PollingManager) fetchAndParseProbe(endpointURL string) (*MetadataStore, error) {
 	probeURL := strings.TrimSuffix(endpointURL, "/") + "/probe"
 	s.logger.Info("Loading metadata", "url", probeURL)
 
 	xmlData, err := client.FetchXML(probeURL)
 	if err != nil {
-		return fmt.Errorf("не удалось получить /probe с %s: %w", probeURL, err)
+		return nil, fmt.Errorf("не удалось получить /probe с %s: %w", probeURL, err)
 	}
 
 	var devices models.MTConnectDevices
 	if err := xml.Unmarshal(xmlData, &devices); err != nil {
-		return fmt.Errorf("не удалось распарсить /probe XML с %s: %w", probeURL, err)
+		return nil, fmt.Errorf("не удалось распарсить /probe XML с %s: %w", probeURL, err)
+	}
+
+	store := &MetadataStore{
+		DeviceMetadata: make(map[string]models.DataItemMetadata),
+		AxisLinks:      make(map[string]models.AxisDataItemLink),
+		SpindleLinks:   make(map[string]models.SpindleDataItemLink),
 	}
 
 	for _, device := range devices.Devices {
@@ -172,30 +190,29 @@ func (s *PollingManager) fetchAndParseProbe(endpointURL string) error {
 		if deviceId == "" {
 			deviceId = device.UUID
 		}
-		s.metadataMutex.Lock()
+
 		for _, item := range device.DataItems {
-			s.deviceMetadataStore[strings.ToLower(item.ID)] = models.DataItemMetadata{
+			store.DeviceMetadata[strings.ToLower(item.ID)] = models.DataItemMetadata{
 				ID: item.ID, Name: item.Name, ComponentId: device.ID, ComponentName: device.Name,
 				ComponentType: "Device", Category: item.Category, Type: item.Type, SubType: item.SubType,
 			}
 		}
-		s.metadataMutex.Unlock()
+
 		if device.ComponentList != nil {
-			s.extractComponentMetadata(device.ComponentList.Components, deviceId)
+			s.extractComponentMetadata(store, device.ComponentList.Components, deviceId)
 		}
 	}
-	return nil
+	return store, nil
 }
 
-func (s *PollingManager) extractComponentMetadata(components []models.ProbeComponent, deviceId string) {
+func (s *PollingManager) extractComponentMetadata(store *MetadataStore, components []models.ProbeComponent, deviceId string) {
 	for _, comp := range components {
 		componentType := strings.ToUpper(comp.XMLName.Local)
 		isAxisOrSpindle := componentType == "LINEAR" || componentType == "ROTARY"
 
-		s.metadataMutex.Lock()
 		for _, item := range comp.DataItems {
 			lowerId := strings.ToLower(item.ID)
-			s.deviceMetadataStore[lowerId] = models.DataItemMetadata{
+			store.DeviceMetadata[lowerId] = models.DataItemMetadata{
 				ID: item.ID, Name: item.Name, ComponentId: comp.ID, ComponentName: comp.Name,
 				ComponentType: strings.ToLower(comp.XMLName.Local), Category: item.Category, Type: item.Type, SubType: item.SubType,
 			}
@@ -204,20 +221,19 @@ func (s *PollingManager) extractComponentMetadata(components []models.ProbeCompo
 				dataKey := strings.ToLower(item.Type)
 				switch componentType {
 				case "LINEAR":
-					s.axisDataItemLinks[lowerId] = models.AxisDataItemLink{
+					store.AxisLinks[lowerId] = models.AxisDataItemLink{
 						DeviceID: deviceId, AxisComponentID: comp.ID, AxisName: comp.Name, AxisType: componentType, DataKey: dataKey,
 					}
 				case "ROTARY":
-					s.spindleDataItemLinks[lowerId] = models.SpindleDataItemLink{
+					store.SpindleLinks[lowerId] = models.SpindleDataItemLink{
 						DeviceID: deviceId, SpindleComponentID: comp.ID, SpindleName: comp.Name, SpindleType: componentType, DataKey: dataKey,
 					}
 				}
 			}
 		}
-		s.metadataMutex.Unlock()
 
 		if comp.ComponentList != nil {
-			s.extractComponentMetadata(comp.ComponentList.Components, deviceId)
+			s.extractComponentMetadata(store, comp.ComponentList.Components, deviceId)
 		}
 	}
 }
@@ -245,7 +261,7 @@ func (s *PollingManager) startPollingForMachineUnsafe(sessionID, endpointURL, ma
 				s.logger.Info("Polling stopped", "sessionID", sessionID)
 				return
 			case <-ticker.C:
-				s.processSingleEndpoint(currentURL, machineID)
+				s.processSingleEndpoint(sessionID, currentURL, machineID)
 			}
 		}
 	}()
