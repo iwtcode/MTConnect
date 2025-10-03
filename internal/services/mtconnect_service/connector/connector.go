@@ -17,26 +17,18 @@ import (
 	"gorm.io/gorm"
 )
 
-type PollingStarter interface {
-	StopPollingForMachine(sessionID string) error
-	LoadMetadataForEndpoint(endpointURL string) error
-	CheckMachineConnection(endpointURL string) error
-}
-
 type ConnectionManager struct {
-	mu         sync.RWMutex
-	pool       map[string]*models.ConnectionInfo
-	pollingMgr PollingStarter
-	dbRepo     interfaces.CncMachineRepository
-	logger     *logging.Logger
+	mu     sync.RWMutex
+	pool   map[string]*models.ConnectionInfo
+	dbRepo interfaces.CncMachineRepository
+	logger *logging.Logger
 }
 
-func NewConnectionManager(pollingMgr PollingStarter, dbRepo interfaces.CncMachineRepository, logger *logging.Logger) *ConnectionManager {
+func NewConnectionManager(dbRepo interfaces.CncMachineRepository, logger *logging.Logger) *ConnectionManager {
 	return &ConnectionManager{
-		pool:       make(map[string]*models.ConnectionInfo),
-		pollingMgr: pollingMgr,
-		dbRepo:     dbRepo,
-		logger:     logger.WithPrefix("CONNECTOR"),
+		pool:   make(map[string]*models.ConnectionInfo),
+		dbRepo: dbRepo,
+		logger: logger.WithPrefix("CONNECTOR"),
 	}
 }
 
@@ -75,10 +67,6 @@ func (s *ConnectionManager) CreateConnection(req models.ConnectionRequest) (*mod
 		return nil, err
 	}
 
-	if err := s.pollingMgr.LoadMetadataForEndpoint(req.EndpointURL); err != nil {
-		return nil, fmt.Errorf("ошибка при загрузке метаданных для %s: %w", req.EndpointURL, err)
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -96,12 +84,7 @@ func (s *ConnectionManager) CreateConnection(req models.ConnectionRequest) (*mod
 	}
 
 	connInfo := createConnectionInfo(sessionID, targetDevice.Name, req, targetDevice.Description.Manufacturer)
-
-	errCheck := s.pollingMgr.CheckMachineConnection(connInfo.Config.EndpointURL)
-	connInfo.IsHealthy = (errCheck == nil)
-	if !connInfo.IsHealthy {
-		s.logger.Warn("Initial health check failed. Endpoint is unavailable.", "sessionID", sessionID)
-	}
+	connInfo.IsHealthy = true // Раз /probe получен, значит соединение в порядке
 
 	s.pool[sessionID] = connInfo
 
@@ -141,9 +124,6 @@ func (s *ConnectionManager) RestoreConnection(machine entities.CncMachine) (*mod
 				connInfo.MachineID = targetDevice.Name
 				connInfo.Config.Manufacturer = targetDevice.Description.Manufacturer
 				connInfo.IsHealthy = true
-				if err := s.pollingMgr.LoadMetadataForEndpoint(machine.EndpointURL); err != nil {
-					s.logger.Warn("Failed to load metadata for endpoint.", "endpoint", machine.EndpointURL, "error", err)
-				}
 			}
 		}
 	}
@@ -188,7 +168,6 @@ func (s *ConnectionManager) DeleteConnection(sessionID string) error {
 		return nil
 	}
 
-	_ = s.pollingMgr.StopPollingForMachine(sessionID)
 	delete(s.pool, sessionID)
 
 	if err := s.dbRepo.Delete(sessionID); err != nil && err != gorm.ErrRecordNotFound {
@@ -209,7 +188,10 @@ func (s *ConnectionManager) CheckConnection(sessionID string) (*models.Connectio
 	}
 
 	previousHealth := conn.IsHealthy
-	err := s.pollingMgr.CheckMachineConnection(conn.Config.EndpointURL)
+
+	probeURL := strings.TrimSuffix(conn.Config.EndpointURL, "/") + "/probe"
+	_, err := client.FetchXML(probeURL)
+
 	conn.IsHealthy = (err == nil)
 	conn.LastUsed = time.Now()
 	conn.UseCount++

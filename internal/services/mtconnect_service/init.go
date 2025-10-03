@@ -14,26 +14,44 @@ import (
 type mtconnectService struct {
 	connMgr *connector.ConnectionManager
 	pollMgr *poller.PollingManager
+	logger  *logging.Logger
 }
 
 func NewMTConnectService(repo interfaces.CncMachineRepository, producer interfaces.KafkaService, logger *logging.Logger) interfaces.MTConnectService {
 	pollingManager := poller.NewPollingManager(repo, producer, logger)
-	connectionManager := connector.NewConnectionManager(pollingManager, repo, logger)
+	connectionManager := connector.NewConnectionManager(repo, logger)
 
 	return &mtconnectService{
 		connMgr: connectionManager,
 		pollMgr: pollingManager,
+		logger:  logger,
 	}
 }
 
-// --- Реализация методов интерфейса MTConnectService ---
-
 func (s *mtconnectService) CreateConnection(req models.ConnectionRequest) (*models.ConnectionInfo, error) {
-	return s.connMgr.CreateConnection(req)
+	connInfo, err := s.connMgr.CreateConnection(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.pollMgr.LoadMetadataForEndpoint(connInfo.Config.EndpointURL); err != nil {
+		s.logger.Warn("Could not load metadata for new connection, polling data may be incomplete", "sessionID", connInfo.SessionID, "error", err)
+	}
+
+	return connInfo, nil
 }
 
 func (s *mtconnectService) RestoreConnection(machine entities.CncMachine) (*models.ConnectionInfo, error) {
-	return s.connMgr.RestoreConnection(machine)
+	connInfo, err := s.connMgr.RestoreConnection(machine)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.pollMgr.LoadMetadataForEndpoint(connInfo.Config.EndpointURL); err != nil {
+		s.logger.Warn("Could not load metadata for restored connection, polling data may be incomplete", "sessionID", connInfo.SessionID, "error", err)
+	}
+
+	return connInfo, nil
 }
 
 func (s *mtconnectService) GetConnection(sessionID string) (*models.ConnectionInfo, bool) {
@@ -45,6 +63,12 @@ func (s *mtconnectService) GetAllConnections() []*models.ConnectionInfo {
 }
 
 func (s *mtconnectService) DeleteConnection(sessionID string) error {
+	if s.pollMgr.IsPollingActive(sessionID) {
+		if err := s.pollMgr.StopPolling(sessionID); err != nil {
+			s.logger.Error("Error stopping polling before deleting connection", "sessionID", sessionID, "error", err)
+		}
+	}
+
 	return s.connMgr.DeleteConnection(sessionID)
 }
 

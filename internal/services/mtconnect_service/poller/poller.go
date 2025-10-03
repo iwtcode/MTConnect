@@ -96,20 +96,6 @@ func (s *PollingManager) StopPolling(sessionID string) error {
 	return nil
 }
 
-func (s *PollingManager) StopPollingForMachine(sessionID string) error {
-	s.pollsMutex.Lock()
-	defer s.pollsMutex.Unlock()
-	poll, exists := s.activePolls[sessionID]
-	if !exists {
-		return nil
-	}
-	poll.ticker.Stop()
-	poll.done <- true
-	close(poll.done)
-	delete(s.activePolls, sessionID)
-	return nil
-}
-
 func (s *PollingManager) CheckMachineConnection(endpointURL string) error {
 	probeURL := strings.TrimSuffix(endpointURL, "/") + "/probe"
 	_, err := client.FetchXML(probeURL)
